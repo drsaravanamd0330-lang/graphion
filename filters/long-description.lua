@@ -62,7 +62,22 @@ local function described_blocks(blocks, id)
       inlines:insert(pandoc.Space())
     end
   end
-  return {pandoc.Para(inlines)}
+  local para = pandoc.Para(inlines)
+  -- The EPUB keeps the image's aria-describedby, so the paragraph has to
+  -- carry the id it names. Without it epubcheck fails the container
+  -- (RSC-005), which is what every Writing Spaces 7 chapter with a long
+  -- description did: the attribute was written in every format and its
+  -- target only in HTML.
+  if FORMAT:match("epub") then
+    return {pandoc.Div({para}, pandoc.Attr(id))}
+  end
+  return {para}
+end
+
+-- Only the writers that emit the target get the reference to it. Typst and
+-- JATS have no element for the attribute to name.
+local function links_description()
+  return FORMAT:match("html") or FORMAT:match("epub")
 end
 
 function Meta(meta)
@@ -104,7 +119,9 @@ function Pandoc(doc)
         end
         count = count + 1
         found = {blocks = blocks, id = "longdesc-" .. count}
-        img.attributes["aria-describedby"] = found.id
+        if links_description() then
+          img.attributes["aria-describedby"] = found.id
+        end
         return img
       end,
     })

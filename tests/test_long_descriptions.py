@@ -173,6 +173,40 @@ def test_the_pdf_gets_a_labelled_paragraph_instead():
 
 
 @needs_pandoc
+def test_the_epub_reference_has_a_target_in_the_same_file(tmp_path):
+    """The EPUB writer is not an HTML writer to this filter, so it got the
+    labelled paragraph with no id while the image kept its
+    aria-describedby. epubcheck fails the whole container on that
+    (RSC-005), and every Writing Spaces 7 chapter with a long description
+    shipped an invalid EPUB. The image and its description sit in one
+    block run, so they land in the same XHTML file."""
+    import zipfile
+
+    out = tmp_path / "doc.epub"
+    subprocess.run(
+        [pandoc, "-f", "markdown+yaml_metadata_block", "-t", "epub3",
+         f"--lua-filter={FILTER}", "-o", str(out), "--metadata=title:T"],
+        input=DOC, capture_output=True, text=True, encoding="utf-8",
+        check=True)
+
+    with zipfile.ZipFile(out) as z:
+        pages = [z.read(n).decode("utf-8") for n in z.namelist()
+                 if n.endswith(".xhtml") and "aria-describedby" in
+                 z.read(n).decode("utf-8")]
+    assert len(pages) == 1
+    assert 'aria-describedby="longdesc-1"' in pages[0]
+    assert 'id="longdesc-1"' in pages[0]
+    assert "A five stage flowchart" in pages[0]
+
+
+@needs_pandoc
+def test_the_pdf_carries_no_reference_to_nothing():
+    """Typst has no element for the attribute to name, so it is not
+    written there."""
+    assert "aria-describedby" not in render(DOC, "typst")
+
+
+@needs_pandoc
 def test_it_is_visible_rather_than_hidden():
     """A description hidden from sighted readers is one nobody proofreads,
     and it rots. Neither writer may put it behind `aria-hidden` or off
