@@ -232,6 +232,33 @@ the deploy carry it. Seeding templates no-clobber was the earlier behaviour, and
 it meant a modified template never reached the volume: the deploy succeeded, the
 galley rendered exactly as before, and nothing said why.
 
+## Publishing an issue ingested on another machine
+
+A deploy builds from the local working tree, not from git, and `.dockerignore`
+keeps article `assets/` in, so an issue ingested and remediated on a laptop
+reaches the volume, figures included, on the next deploy. What it does not
+reach is the database: seeding copies files, and nothing indexed them, so the
+issue was on the volume with no issue row and no article rows. Writing Spaces 7
+arrived that way. Once the deploy is up, index it on the machine:
+
+```bash
+fly ssh console -C "python /app/index_issue.py writing-spaces v7-n1-2027 --render --assemble"
+```
+
+`index_issue.py` reads `_issue.yaml` for the issue and each article's front
+matter for its title, order (`chapter-number`) and table-of-contents section
+(`toc-section`). It leaves anything already indexed alone, so it is safe to run
+twice. `--render` renders HTML, PDF and EPUB and records lint and the PDF's
+declaration; `--assemble` binds the issue. Then run the validators from
+`/accessibility/<slug>/validate`, or:
+
+```bash
+fly ssh console -C "python /app/validate_galleys.py writing-spaces --skip-current"
+```
+
+Take a backup first if the volume holds anything you have not backed up:
+`fly ssh console -C "python /app/deploy/backup.py"`.
+
 ## Optional: put Cloudflare Access in front
 
 If the public login page is more exposure than you want, the image already
