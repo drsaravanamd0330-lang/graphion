@@ -127,6 +127,15 @@ class Chapter:
     # page can say which.
     license: Optional[str] = None
     license_url: Optional[str] = None
+    # The volume's teacher resources collected into one file, which is split
+    # across the chapters once they are in rather than ingested as one.
+    teacher_collection: bool = False
+
+
+# Writing Spaces 7 moved every chapter's Teacher Resources out of the
+# chapters into one collected file, "TeachingResources_WS7-2.pdf", 128
+# pages, which the length rule above read as a whole volume and left out.
+TEACHER_COLLECTION_RE = re.compile(r"teach(?:ing|er)[-_ ]?resources", re.I)
 
 
 def slugify(text: str) -> str:
@@ -264,12 +273,19 @@ def plan(pdf_dir: Path, manifest: dict, volume: Optional[int] = None) -> list:
                         f"and not a chapter)")
                 is_chapter = False
                 skip = True
+        teacher_collection = bool(TEACHER_COLLECTION_RE.search(pdf.stem))
+        if teacher_collection:
+            note = ("teacher resources for the whole volume; split across its "
+                    "chapters once they are in")
+            is_chapter = False
+            skip = True
         if entry.get("chapter-number") is not None:
             number = int(entry["chapter-number"])
             note = "chapter number from the manifest"
             # An entry naming this file is the editor saying they want it,
             # which outranks the runner's reading of its name.
             skip = False
+            teacher_collection = False
         title = entry.get("title")
         authors = entry.get("authors") or []
         chapter_like = is_chapter or number is not None
@@ -285,7 +301,8 @@ def plan(pdf_dir: Path, manifest: dict, volume: Optional[int] = None) -> list:
                                 authors=authors, slug=slug, note=note,
                                 is_chapter=chapter_like, skip=skip,
                                 license=entry.get("license"),
-                                license_url=entry.get("license-url")))
+                                license_url=entry.get("license-url"),
+                                teacher_collection=teacher_collection))
     # Numbered chapters in order, then anything unnumbered, by filename. A
     # volume's front and back matter sorts to the end rather than being
     # dropped: the editor decides whether to keep it.
@@ -309,6 +326,179 @@ def volume_furniture(chapters: list) -> frozenset:
         counts.update(set(pdf_ingest.image_digests(chapter.pdf)))
     return frozenset(digest for digest, seen in counts.items()
                      if seen >= FURNITURE_MIN_CHAPTERS)
+
+
+_TR_SECTION_RE = re.compile(r"(?m)^#{1,6}[ \t]+Teacher Resources for[ \t]+(.+?)[ \t]*$")
+_TR_END_RE = re.compile(r"(?m)^#{1,6}[ \t]+Contributors\b.*$")
+_TR_DEF_RE = re.compile(r"(?ms)^\[\^([^\]\s]+)\]:.*?(?=\n\n(?![ \t]{4})|\Z)")
+_TR_REF_RE = re.compile(r"\[\^([^\]\s]+)\](?!:)")
+_TR_ASSET_RE = re.compile(r"\]\(assets/([^)\s]+)\)")
+
+
+def split_teacher_collection(body: str) -> list:
+    """A collected teacher-resources body as `(title, text, notes)` per chapter.
+
+    A section starts at its "Teacher Resources for …" head and runs to the
+    next one; the last runs to the collection's own contributors list,
+    which the volume already carries. Everything before the first section
+    (title page, copyright, contents) belongs to the collection and not to
+    a chapter. The byline and any wrapped line of the title under the head
+    go, because the teacher galley prints both from the chapter's front
+    matter.
+
+    Notes go with the section that refers to them, relabelled `tr…` so they
+    cannot meet the chapter's own: both number from 1.
+    """
+    defs = {m.group(1): m.group(0).rstrip() for m in _TR_DEF_RE.finditer(body)}
+    text = _TR_DEF_RE.sub("", body)
+    heads = list(_TR_SECTION_RE.finditer(text))
+    sections = []
+    for i, head in enumerate(heads):
+        end = heads[i + 1].start() if i + 1 < len(heads) else len(text)
+        chunk = text[head.end():end]
+        if i + 1 == len(heads):
+            stop = _TR_END_RE.search(chunk)
+            if stop:
+                chunk = chunk[:stop.start()]
+        lines = chunk.strip("\n").split("\n")
+        while lines and (not lines[0].strip()
+                         or re.match(r"^#{1,6}\s+\*[^*].*\*\s*$", lines[0])
+                         or (lines[0].startswith("#")
+                             and lines[0].rstrip().endswith(("”", '"')))):
+            lines.pop(0)
+        chunk = "\n".join(lines).strip()
+        if not chunk:
+            # A contents entry that survived is a head with nothing under it.
+            continue
+        used: list = []
+
+        def relabel(match):
+            label = match.group(1)
+            if label not in defs:
+                return match.group(0)
+            if label not in used:
+                used.append(label)
+            return f"[^tr{label}]"
+
+        chunk = _TR_REF_RE.sub(relabel, chunk)
+        notes = [re.sub(r"^\[\^([^\]\s]+)\]:", lambda m: f"[^tr{m.group(1)}]:",
+                        defs[label], count=1) for label in used]
+        title = re.sub(r"\s*\*\d+\*\s*$", "", head.group(1)).strip().strip("*")
+        # The head prints the chapter title in quotation marks; the title
+        # itself is what is inside them.
+        title = title.strip().strip("“”\"").strip()
+        sections.append((title, chunk, notes))
+    return sections
+
+
+def _title_words(text: str) -> str:
+    return " ".join(re.sub(r"[^a-z0-9 ]+", " ", (text or "").lower()).split())
+
+
+def match_teacher_sections(sections: list, chapters: list) -> tuple:
+    """Pair sections with `(number, title, path)` chapters.
+
+    Where there are as many sections as chapters they are in the same
+    order, which is how a volume prints them, so they pair by position and
+    a section whose title does not resemble its chapter's is named rather
+    than refused: Writing Spaces 7's sixth section still carries the
+    chapter's working title, "How and Why: Rhetorical Choices of Using
+    Sources", for the published "Why Should I Use Sources?". With a
+    different count, each section goes to the chapter whose title it
+    resembles, and one that resembles none is left out and named.
+    """
+    from difflib import SequenceMatcher
+
+    def score(a, b):
+        return SequenceMatcher(None, _title_words(a), _title_words(b)).ratio()
+
+    pairs, notes = [], []
+    if sections and len(sections) == len(chapters):
+        for section, chapter in zip(sections, chapters):
+            if score(section[0], chapter[1]) < 0.6:
+                notes.append(f"Paired by position: “{section[0]}” with chapter "
+                             f"{chapter[0]}, “{chapter[1]}”; the titles differ.")
+            pairs.append((chapter, section))
+        return pairs, notes
+    for section in sections:
+        best = max(chapters, key=lambda c: score(section[0], c[1]), default=None)
+        if best is not None and score(section[0], best[1]) >= 0.6:
+            pairs.append((best, section))
+        else:
+            notes.append(f"No chapter matches “{section[0]}”; left out.")
+    return pairs, notes
+
+
+def attach_teacher_collection(pdf: Path, journal: dict, volume,
+                              replace: bool = False) -> list:
+    """Ingest a collected teacher-resources file and give each chapter its own.
+
+    Volume 6 printed each chapter's Teacher Resources at its back, and the
+    pipeline splits them into a galley of their own with `teacher-resources:
+    separate`. Volume 7 collects them into one file instead, and this puts
+    each section back where the chapter would have carried it, so the same
+    split renders it. A chapter that already has a Teacher Resources section
+    keeps it unless `replace`.
+
+    Returns notes for the run log.
+    """
+    import shutil
+    import tempfile
+
+    notes: list = []
+    with tempfile.TemporaryDirectory() as tmp:
+        collection = Path(tmp) / "collection"
+        (collection / "assets").mkdir(parents=True)
+        (collection / ".versions").mkdir()
+        conversion.ingest_pdf(pdf, collection, matter=True)
+        conversion.run_cleanups(collection)
+        _, body = conversion.read_article_metadata(collection)
+        sections = split_teacher_collection(body)
+
+        chapters = []
+        for (vol, _source), row in existing_sources(journal["id"]).items():
+            if volume is not None and str(vol) != str(volume):
+                continue
+            path = Path(row["project_path"])
+            fm, _ = conversion.read_article_metadata(path)
+            if fm.get("chapter-number") is None:
+                continue
+            chapters.append((int(fm["chapter-number"]),
+                             conversion.plain_text(fm.get("title")) or "", path))
+        chapters.sort()
+        pairs, match_notes = match_teacher_sections(sections, chapters)
+        notes.extend(match_notes)
+
+        attached = 0
+        for (number, _title, path), (_head, text, section_notes) in pairs:
+            fm, chapter_body = conversion.read_article_metadata(path)
+            if conversion.TEACHER_HEADING_RE.search(chapter_body):
+                if not replace:
+                    notes.append(f"Chapter {number} already carries Teacher "
+                                 f"Resources; left as it is.")
+                    continue
+                chapter_body = conversion.split_teacher_resources(chapter_body)[0]
+
+            def copy_asset(match):
+                name = match.group(1)
+                source = collection / "assets" / name
+                if source.exists():
+                    (path / "assets").mkdir(exist_ok=True)
+                    shutil.copy2(source, path / "assets" / f"tr-{name}")
+                    return f"](assets/tr-{name})"
+                return match.group(0)
+
+            text = _TR_ASSET_RE.sub(copy_asset, text)
+            section = "# Teacher Resources\n\n" + text.strip() + "\n"
+            if section_notes:
+                section += "\n" + "\n\n".join(section_notes) + "\n"
+            fm["teacher-resources"] = "separate"
+            conversion.write_article_metadata(
+                path, fm, chapter_body.rstrip() + "\n\n" + section)
+            attached += 1
+    notes.insert(0, f"Split {pdf.name} into {len(sections)} section(s) and "
+                    f"attached {attached} to their chapters.")
+    return notes
 
 
 def existing_sources(journal_id: int) -> dict:
@@ -384,7 +574,8 @@ def ingest_one(chapter: Chapter, journal: dict, defaults: dict,
                            f"({existing['slug']})")
 
     apath = replace_dir(journal["slug"], chapter.slug, existing)
-    conversion.ingest_pdf(chapter.pdf, apath, skip_image_digests=furniture)
+    conversion.ingest_pdf(chapter.pdf, apath, skip_image_digests=furniture,
+                          matter=not chapter.is_chapter)
     conversion.run_cleanups(apath)
 
     fm, body = conversion.read_article_metadata(apath)
@@ -462,13 +653,32 @@ def _short_title(title: str) -> str:
     return cut.rstrip(" ,;:-") or head[:60]
 
 
+# Words that belong to the surname after them. Taking the last word alone
+# printed Writing Spaces 7's running heads as "Brewer and Gennaro" (Kristen
+# di Gennaro) and "Scooter" (Bethany Van Scooter). A particle is only taken
+# when a given name is left in front of it, so "Van Morrison" stays Morrison.
+SURNAME_PARTICLES = {"da", "das", "de", "del", "della", "der", "des", "di",
+                     "do", "dos", "du", "la", "le", "st.", "ten", "ter",
+                     "van", "von", "zu"}
+
+
+def _surname(name: str) -> str:
+    words = str(name or "").split()
+    if not words:
+        return ""
+    start = len(words) - 1
+    while start > 1 and words[start - 1].lower() in SURNAME_PARTICLES:
+        start -= 1
+    return " ".join(words[start:])
+
+
 def _short_authors(authors: list) -> str:
     names = []
     for a in authors:
         name = a.get("name") if isinstance(a, dict) else str(a)
-        surname = str(name or "").strip().split()[-1:] or [""]
-        if surname[0]:
-            names.append(surname[0])
+        surname = _surname(name)
+        if surname:
+            names.append(surname)
     if not names:
         return ""
     if len(names) == 1:
@@ -572,6 +782,20 @@ def main():
                 sys.exit(1)
         counts[status] = counts.get(status, 0) + 1
         print(f"  {status:<9} {label}  ({detail})")
+
+    for c in chapters:
+        if not c.teacher_collection:
+            continue
+        print()
+        try:
+            for note in attach_teacher_collection(c.pdf, journal, args.volume,
+                                                  replace=args.replace):
+                print(f"  {note}")
+        except Exception as exc:
+            print(f"  FAILED splitting {c.pdf.name}: {type(exc).__name__}: {exc}")
+            if args.stop_on_error:
+                traceback.print_exc()
+                sys.exit(1)
 
     print("\n" + ", ".join(f"{n} {s}" for s, n in sorted(counts.items())))
     print(

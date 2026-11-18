@@ -1702,6 +1702,43 @@ def test_a_note_the_prose_refers_to_is_still_a_footnote():
     assert r"1\." not in out
 
 
+def test_a_restarted_note_number_gets_its_own_label():
+    """Writing Spaces 7 numbers the licence note 1 and the author's first
+    note 1 too. Two `[^1]` definitions made Pandoc keep the first and drop
+    the author's note, in six chapters, with every checker passing."""
+    blocks = [("body", "Prose about a reviewer.[^1] More prose.[^2]"),
+              ("note", "1. This work is licensed under CC BY-NC-ND 4.0."),
+              ("note", "1. The reviewer asked to stay anonymous."),
+              ("note", "2. A second note.")]
+    out = pdf_ingest.blocks_to_markdown(
+        blocks, abstract="An overview.[^1]")
+    assert "[^1]: This work is licensed" in out
+    assert "[^1-2]: The reviewer asked" in out
+    assert "reviewer.[^1-2]" in out
+    assert "[^2]: A second note." in out
+    assert out.count("[^1]:") == 1
+
+
+def test_sections_that_each_restart_at_one_keep_every_note():
+    """A collected teaching-resources file restarts at 1 in each section;
+    every section's note resolved to the first definition."""
+    blocks = [("body", "Section one.[^1]"), ("note", "1. First."),
+              ("body", "Section two.[^1]"), ("note", "1. Second."),
+              ("body", "Section three.[^1]"), ("note", "1. Third.")]
+    out = pdf_ingest.blocks_to_markdown(blocks)
+    assert "one.[^1]" in out and "two.[^1-2]" in out and "three.[^1-3]" in out
+    assert "[^1]: First." in out
+    assert "[^1-2]: Second." in out
+    assert "[^1-3]: Third." in out
+
+
+def test_a_note_cited_twice_is_left_alone():
+    blocks = [("body", "A claim.[^1] Again.[^1]"),
+              ("note", "1. The one note.")]
+    out = pdf_ingest.blocks_to_markdown(blocks)
+    assert out.count("[^1]") == 3 and "[^1-2]" not in out
+
+
 def test_a_note_the_abstract_refers_to_is_still_a_footnote():
     """The abstract is front matter rather than a block, and a reference in
     it does resolve; `12-laflen` carries one."""
@@ -1891,3 +1928,307 @@ def test_stray_initials_are_counted_apart_from_declined_heads():
 
     assert report["stray_initials"] == ["H"]
     assert report["declined_heads"] == []
+
+
+# ---------- paragraphs a page's footnotes interrupt ----------
+
+def test_a_paragraph_resumes_after_the_footnotes_at_a_page_foot():
+    """Writing Spaces 7 puts its licence note under the opening paragraph,
+    and about eighteen chapters split that paragraph mid-sentence where the
+    page turned ("or play" / "music.")."""
+    lines = [
+        _line("Think back to choosing your first-ever cell phone. What",
+              x0=76.5, top=300, page=1),
+        _line("could carry the internet, or play", top=314, page=1),
+        _line("1. This work is licensed under CC BY-NC-ND 4.0.", size=9.0,
+              top=560, page=1),
+        _line("music. For many people in the early 1990s, a phone",
+              top=60, page=2),
+        _line("was a luxury.", top=74, page=2),
+    ]
+    blocks = pdf_ingest.assemble(lines, LAYOUT, set(), set())
+    bodies = [text for kind, text in blocks if kind == "body"]
+    assert len(bodies) == 1
+    assert "or play music. For many people" in bodies[0]
+    assert any(kind == "note" for kind, _ in blocks)
+
+
+def test_a_finished_paragraph_is_not_reopened_over_the_notes():
+    lines = [
+        _line("A paragraph that ends at the foot.", x0=76.5, top=300, page=1),
+        _line("1. A note.", size=9.0, top=560, page=1),
+        _line("Next page flush line that continues nothing", top=60, page=2),
+    ]
+    blocks = pdf_ingest.assemble(lines, LAYOUT, set(), set())
+    assert [k for k, _ in blocks].count("body") == 2
+
+
+def test_a_heading_between_stops_the_paragraph_resuming():
+    lines = [
+        _line("An unfinished line at the foot of the page and", x0=76.5,
+              top=300, page=1),
+        _line("A Heading", size=13.0, x0=150, top=320, page=1),
+        _line("text on the next page", top=60, page=2),
+    ]
+    blocks = pdf_ingest.assemble(lines, LAYOUT, set(), set())
+    bodies = [t for k, t in blocks if k == "body"]
+    assert len(bodies) == 2
+
+
+# ---------- a block set inset as a whole ----------
+
+def test_an_inset_box_is_one_paragraph_not_one_per_line():
+    """Writing Spaces 7 chapter 10's "Practice" boxes are inset on every
+    line, and each line came through as its own paragraph."""
+    lines = [
+        _line("Describe what each paragraph or section is about in the",
+              x0=76.5, top=100),
+        _line("margins of the draft, on a separate sheet of paper. This is",
+              x0=76.5, top=114),
+        _line("known as annotating a text.", x0=76.5, top=128),
+    ]
+    blocks = pdf_ingest.assemble(lines, LAYOUT, set(), set())
+    assert len(blocks) == 1
+    assert "This is known as annotating" in blocks[0][1]
+
+
+def test_one_line_paragraphs_at_an_indent_stay_separate():
+    lines = [
+        _line("Why? To save lives.", x0=76.5, top=100),
+        _line("Why? So they stay well.", x0=76.5, top=114),
+    ]
+    blocks = pdf_ingest.assemble(lines, LAYOUT, set(), set())
+    assert len(blocks) == 2
+
+
+def test_an_ordinary_paragraph_break_still_starts_a_paragraph():
+    lines = [
+        _line("First paragraph opens here and runs", x0=76.5, top=100),
+        _line("to its end.", top=114),
+        _line("Second paragraph opens indented and", x0=76.5, top=128),
+        _line("continues.", top=142),
+    ]
+    blocks = pdf_ingest.assemble(lines, LAYOUT, set(), set())
+    assert len(blocks) == 2
+
+
+# ---------- small type that is not a footnote ----------
+
+def test_small_type_with_body_below_it_stays_where_it_is_printed():
+    """A footnote is the last thing on its page. Small type the body
+    carries on under is a box or a label, and was being moved to the end
+    of the chapter with the notes."""
+    lines = [
+        _line("For a basic journal article, the entry would look like:", top=100),
+        _line("Grady, J. S., et al. (2019). Emotions in storybooks.",
+              size=9.0, top=130),
+        _line("Full citation includes both in-text and reference entries.",
+              x0=76.5, top=170),
+    ]
+    blocks = pdf_ingest.assemble(lines, LAYOUT, set(), set())
+    md = pdf_ingest.blocks_to_markdown(blocks)
+    assert md.index("Grady") < md.index("Full citation")
+    assert [k for k, _ in blocks] == ["body", "inset", "body"]
+
+
+def test_a_real_footnote_is_still_collected():
+    lines = [
+        _line("A claim with a note.[^1]", top=100),
+        _line("1. The note.", size=9.0, top=560),
+    ]
+    md = pdf_ingest.blocks_to_markdown(
+        pdf_ingest.assemble(lines, LAYOUT, set(), set()))
+    assert "[^1]: The note." in md
+
+
+def test_a_singular_work_cited_is_read_as_a_bibliography():
+    """Chapter 5 of Writing Spaces 7 cites one source under "Work Cited";
+    its entry was read as a footnote and moved after the notes."""
+    lines = [
+        _line("Work Cited", size=13.0, x0=180, top=100),
+        _line("Martinez, Aja Y. Counterstory. NCTE, 2020.", size=9.0, top=130),
+    ]
+    blocks = pdf_ingest.assemble(lines, LAYOUT, set(), set())
+    assert ("body", "Martinez, Aja Y. Counterstory. NCTE, 2020.") in blocks
+
+
+# ---------- small caps ----------
+
+def _sc_chars(text, font):
+    return [{"text": ch, "fontname": font} for ch in text if not ch.isspace()]
+
+
+def test_a_small_caps_head_is_set_in_title_case():
+    """Writing Spaces 7's small-caps heads extracted with scrambled case."""
+    src = "searCh engine optimization: hoW searCh results Find you"
+    chars = _sc_chars(src, "KMOKGY+AGaramondPro-Bold-SC700")
+    assert pdf_ingest._recase_small_caps(src, chars) == \
+        "Search Engine Optimization: How Search Results Find You"
+
+
+def test_every_chapter_s_overview_head_is_recognised_again():
+    src = "overvieW"
+    chars = _sc_chars(src, "AGaramondPro-Regular-SC700")
+    out = pdf_ingest._recase_small_caps(src, chars)
+    assert out == "Overview" and pdf_ingest.is_overview_head(out)
+
+
+def test_a_small_caps_run_inside_a_line_is_recased_alone():
+    src = "Case Study #3: A NAtioN At Risk"
+    chars = (_sc_chars("Case Study #3:", "AGaramondPro-Regular")
+             + _sc_chars("A NAtioN At Risk", "AGaramondPro-ItalicSC"))
+    assert pdf_ingest._recase_small_caps(src, chars) == \
+        "Case Study #3: A Nation at Risk"
+
+
+def test_one_small_caps_word_in_prose_is_an_acronym():
+    src = "the cccc met in 1950"
+    chars = (_sc_chars("the", "Minion-Regular") + _sc_chars("cccc", "Minion-SC")
+             + _sc_chars("met in 1950", "Minion-Regular"))
+    assert pdf_ingest._recase_small_caps(src, chars) == "the CCCC met in 1950"
+
+
+def test_ordinary_fonts_are_left_alone():
+    src = "iPhone and McMullen and DiCarlo"
+    chars = _sc_chars(src, "AGaramondPro-Regular")
+    assert pdf_ingest._recase_small_caps(src, chars) == src
+    assert not pdf_ingest._small_caps_font("HelveticaNeue-DISC")
+
+
+# ---------- text laid over a picture ----------
+
+def test_text_inside_a_figure_raster_is_the_picture_s():
+    regions = [(100.0, 200.0, 300.0, 400.0)]
+    inside = {"x0": 120, "x1": 160, "top": 250, "bottom": 258}
+    outside = {"x0": 120, "x1": 160, "top": 410, "bottom": 418}
+    assert pdf_ingest._inside_any(inside, regions)
+    assert not pdf_ingest._inside_any(outside, regions)
+
+
+def test_a_bold_small_caps_line_is_a_head():
+    line = _line("Search Engine Optimization: How Search Results Find You",
+                 size=9.1, fonts={"KMOKGY+AGaramondPro-Bold-SC700"})
+    assert pdf_ingest.classify(line, LAYOUT) == "head"
+
+
+def test_a_roman_small_caps_running_head_is_not():
+    line = _line("Writing Spaces 7", size=9.0,
+                 fonts={"AGaramondPro-Regular-SC700"})
+    assert pdf_ingest.classify(line, LAYOUT) == "note"
+
+
+# ---------- descriptions the file already states ----------
+
+class _El:
+    def __init__(self, page, alt):
+        self.page, self.alt, self.is_figure = page, alt, True
+
+
+class _Outline:
+    def __init__(self, elements):
+        self.elements = elements
+
+
+def test_a_tagged_figure_s_alt_is_carried_into_the_image():
+    """`assess.py` counted Writing Spaces 7 chapter 2's eight tagged
+    descriptions as done, and ingest threw them away."""
+    figures = [{"page": 6, "index": 0, "name": "figure-p006-1.jpg"},
+               {"page": 7, "index": 0, "name": "figure-p007-1.jpg"}]
+    outline = _Outline([_El(5, "A man in a red car\non a large phone."),
+                        _El(6, "")])
+    assert pdf_ingest.apply_stated_alts(outline, figures) == 1
+    assert figures[0]["stated_alt"] == "A man in a red car on a large phone."
+    assert "stated_alt" not in figures[1]
+    blocks, _ = pdf_ingest.place_figures([("body", "Prose.")], figures, {}, {})
+    assert "![A man in a red car on a large phone.](assets/figure-p006-1.jpg)" in \
+        "\n".join(text for _, text in blocks)
+
+
+def test_a_page_whose_counts_disagree_is_left_alone():
+    figures = [{"page": 3, "index": 0, "name": "a.png"},
+               {"page": 3, "index": 1, "name": "b.png"}]
+    outline = _Outline([_El(2, "Only one described.")])
+    assert pdf_ingest.apply_stated_alts(outline, figures) == 0
+
+
+# ---------- matter ----------
+
+def test_a_contents_page_is_recognised_and_its_continuation_too():
+    """Writing Spaces 7's front matter set its contents in display type and
+    every entry came through as a heading."""
+    page5 = [_line("Contents", page=5),
+             _line("Acknowledgments ix", page=5),
+             _line("1 Literacy Crisis! A Brief History of Writing Studies 1", page=5),
+             _line("Roberto S. Leon", page=5),
+             _line("2 This Changes Everything. Again 13", page=5),
+             _line("Elizabeth Catchmark and J Palmeri", page=5)]
+    page6 = [_line("10 What am I reading this draft for? 116", page=6),
+             _line("Kaitlin Clinnin and Benjamin Keating", page=6),
+             _line("11 Why Am I Even Writing This? 130", page=6),
+             _line("Theo Tekin", page=6)]
+    page7 = [_line("Acknowledgments", page=7),
+             _line("Since the inception of Writing Spaces, our team", page=7),
+             _line("has been continually in flux, which we think is", page=7),
+             _line("a good thing. It means we are adaptable.", page=7)]
+    assert pdf_ingest.contents_pages(page5 + page6 + page7) == {5, 6}
+
+
+def test_a_chapter_page_is_not_a_contents_page():
+    page = [_line("Contents of a good argument", page=3),
+            _line("There are four things every argument holds,", page=3),
+            _line("and the first of them is a claim that someone", page=3),
+            _line("could reasonably dispute.", page=3)]
+    assert pdf_ingest.contents_pages(page) == set()
+
+
+def test_a_wrapped_byline_keeps_every_author():
+    """Writing Spaces 7 chapter 29's fourth author wrapped onto a second
+    line, which became a heading in the body."""
+    first = [
+        _line("29 Reflections on Rhetorically Navigating", size=18.0, page=1),
+        _line("Brandon Westfall, Skye McMullen, Cynthia Johnson,", size=12.0,
+              italic=True, page=1, top=150),
+        _line("and Bridget Gelms", size=12.0, italic=True, page=1, top=164),
+        _line("Overview", size=13.0, x0=180, page=1, top=200),
+    ]
+    fm, _, consumed, _ = pdf_ingest.extract_front_matter(first, LAYOUT)
+    assert [a["name"] for a in fm["author"]] == [
+        "Brandon Westfall", "Skye McMullen", "Cynthia Johnson", "Bridget Gelms"]
+    assert id(first[2]) in consumed
+
+
+def test_matter_takes_no_overview_from_its_prose():
+    """The contributors list's first page, seven biographies, was taken as
+    the overview of a list that has none."""
+    first = [
+        _line("Contributors", size=18.0, page=1),
+        _line("Jocelyn Ahlers is Professor of Linguistics at Cal State.", page=1),
+        _line("Jun Akiyoshi is Assistant Teaching Professor at Penn State.", page=1),
+    ]
+    _, overview, _, _ = pdf_ingest.extract_front_matter(first, LAYOUT, matter=True)
+    assert overview == []
+    _, overview, _, _ = pdf_ingest.extract_front_matter(first, LAYOUT)
+    assert overview
+
+
+def test_a_note_running_over_the_page_joins_the_note_it_continues():
+    """Chapter 15's note on the IELTS prompt ran onto the next page and the
+    rest of it printed after the notes as a paragraph of its own."""
+    blocks = [("body", "The exam.[^2]"),
+              ("note", "2. Test writers respond to prompts such as: *To what*"),
+              ("body", "Next page prose."),
+              ("note", "*extent do you agree?* Only the English is scored.")]
+    out = pdf_ingest.blocks_to_markdown(blocks)
+    assert ("[^2]: Test writers respond to prompts such as: *To what* "
+            "*extent do you agree?* Only the English is scored.") in out
+    assert out.count("extent do you agree") == 1
+
+
+def test_small_type_with_only_a_caption_below_it_stays_in_place():
+    lines = [
+        _line("For a basic journal article, the entry looks like:", top=100),
+        _line("Grady, J. S. (2019). Emotions in storybooks.", size=9.0, top=130),
+        _line("Figure 5. Sample APA Reference List Entry.", size=9.0, top=170),
+    ]
+    blocks = pdf_ingest.assemble(lines, LAYOUT, set(), set())
+    assert ("inset", "Grady, J. S. (2019). Emotions in storybooks.") in blocks

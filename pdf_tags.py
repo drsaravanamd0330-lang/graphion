@@ -33,6 +33,7 @@ the identifier is named in the report instead of being averaged away.
 """
 from __future__ import annotations
 
+import html
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -179,7 +180,10 @@ def declared_title(packet: str) -> str:
     it and why both are reported separately where they disagree.
     """
     match = _TITLE_RE.search(packet or "")
-    return match.group("title").strip() if match else ""
+    # The packet is XML, so a title is stored escaped: Typst writes an
+    # apostrophe as &apos;. Reading the raw text reported Writing Spaces 7's
+    # “Isn’t it, like, outdated?” as “Isn&apos;t …”, a title no reader hears.
+    return html.unescape(match.group("title")).strip() if match else ""
 
 
 class _SourceCopier:

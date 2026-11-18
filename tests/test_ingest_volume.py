@@ -318,6 +318,21 @@ def test_short_authors_of_nothing_is_empty():
     assert iv._short_authors([]) == ""
 
 
+def test_a_surname_keeps_its_particle():
+    """Writing Spaces 7 ran "Brewer and Gennaro" and "Scooter" as running
+    heads."""
+    assert iv._short_authors([{"name": "Meaghan Brewer"},
+                              {"name": "Kristen di Gennaro"}]) == \
+        "Brewer and di Gennaro"
+    assert iv._short_authors([{"name": "Bethany Van Scooter"}]) == "Van Scooter"
+    assert iv._short_authors([{"name": "Maria de la Cruz"}]) == "de la Cruz"
+
+
+def test_a_particle_that_is_the_given_name_is_left_alone():
+    assert iv._short_authors([{"name": "Van Morrison"}]) == "Morrison"
+    assert iv._short_authors([{"name": "Vanshika"}]) == "Vanshika"
+
+
 def test_short_title_of_a_long_title_cuts_at_a_word():
     """With no subtitle to cut at, cutting at the 60th character cut through
     a word, and the result ran as a running head on every page."""
@@ -478,3 +493,83 @@ def test_a_recorded_path_that_is_no_longer_a_directory_is_not_written_to(
 
     assert target != gone
     assert target.parent.name == "_unfiled"
+
+
+# ---------- a volume's teacher resources collected into one file ----------
+
+def test_a_collected_teacher_resources_file_is_planned_for_splitting(tmp_path):
+    """Writing Spaces 7 collects every chapter's Teacher Resources into one
+    128-page file, which the length rule read as a whole volume and left
+    out."""
+    _pdf(tmp_path / "TeachingResources_WS7-2.pdf", pages=128)
+    _pdf(tmp_path / "1Leon.pdf", pages=12)
+    planned = {c.pdf.name: c for c in iv.plan(tmp_path, {}, 7)}
+    collection = planned["TeachingResources_WS7-2.pdf"]
+    assert collection.teacher_collection and collection.skip
+    assert "split across its chapters" in collection.note
+    assert not planned["1Leon.pdf"].teacher_collection
+
+
+COLLECTED = """# TEACHING RESOURCES FOR WRITING SPACES 7
+
+A copyright page.[^1]
+
+# Teacher Resources for “Literacy Crisis! A Brief History of Writing Studies”
+
+# *Roberto S. Leon*
+
+# Teaching Rationale
+
+Ask students to read the case studies.[^1-2]
+
+# Teacher Resources for “How and Why: Rhetorical Choices of Using Sources”
+
+# *Enrique Paz*
+
+# Overview and Teaching Strategies
+
+Sources do a great deal.[^1-3]
+
+# Contributors
+
+Jocelyn Ahlers is Professor of Linguistics.
+
+[^1]: The cataloging data.
+
+[^1-2]: This work is licensed for Leon.
+
+[^1-3]: This work is licensed for Paz.
+"""
+
+
+def test_the_collection_splits_into_sections_with_their_own_notes():
+    sections = iv.split_teacher_collection(COLLECTED)
+    assert [s[0] for s in sections] == [
+        "Literacy Crisis! A Brief History of Writing Studies",
+        "How and Why: Rhetorical Choices of Using Sources"]
+    leon, paz = sections
+    assert leon[1].startswith("# Teaching Rationale")
+    assert "Roberto S. Leon" not in leon[1]
+    assert "case studies.[^tr1-2]" in leon[1]
+    assert leon[2] == ["[^tr1-2]: This work is licensed for Leon."]
+    assert "Jocelyn Ahlers" not in paz[1]
+    assert "cataloging" not in leon[1] + paz[1]
+
+
+def test_sections_pair_by_position_and_name_a_title_that_differs():
+    sections = iv.split_teacher_collection(COLLECTED)
+    chapters = [(1, "Literacy Crisis! A Brief History of Writing Studies", "a"),
+                (6, "Why Should I Use Sources? Integrating Research Rhetorically", "b")]
+    pairs, notes = iv.match_teacher_sections(sections, chapters)
+    assert [p[0][0] for p in pairs] == [1, 6]
+    assert len(notes) == 1 and "How and Why" in notes[0]
+
+
+def test_with_a_different_count_sections_pair_by_title():
+    sections = iv.split_teacher_collection(COLLECTED)
+    chapters = [(1, "Literacy Crisis! A Brief History of Writing Studies", "a"),
+                (2, "Something Else Entirely", "b"),
+                (3, "Another Unrelated Chapter", "c")]
+    pairs, notes = iv.match_teacher_sections(sections, chapters)
+    assert [p[0][0] for p in pairs] == [1]
+    assert "How and Why" in notes[0]

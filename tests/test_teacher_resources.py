@@ -273,6 +273,15 @@ def test_teacher_front_matter_titles_itself():
     assert out["short-title"] == "Teacher Resources"
 
 
+def test_a_quoted_chapter_title_nests_its_quotes():
+    """Writing Spaces 7 printed ““This Changes Everything. Again”: …” as
+    the teacher galley's title. The printed teaching resources nest them."""
+    out = conversion._teacher_front_matter(
+        {"title": "“This Changes Everything. Again”: A Re-Introduction"})
+    assert out["title"] == ("Teacher Resources for "
+                            "“‘This Changes Everything. Again’: A Re-Introduction”")
+
+
 def test_teacher_front_matter_drops_what_belongs_to_the_chapter():
     fm = {"title": "A Chapter", "abstract": "An overview.", "chapter-number": 3,
           "start-page": 41, "doi": "10.1234/x", "author": [{"name": "Jane Doe"}],

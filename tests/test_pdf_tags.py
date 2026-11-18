@@ -677,3 +677,12 @@ def test_a_merged_file_can_be_merged_again(tmp_path, two_parts):
     assert sorted(parent_tree(twice)) == list(range(8))
     keys = [int(p["/StructParents"]) for p in PdfReader(str(twice)).pages]
     assert keys == list(range(8))
+
+
+def test_a_declared_title_is_read_as_text_not_as_xml():
+    """Typst escapes an apostrophe in dc:title as &apos;, which is correct
+    XML. Reading the raw packet reported Writing Spaces 7's chapter 16 as
+    “Isn&apos;t it, like, outdated?”, a title no reader hears."""
+    packet = ('<dc:title><rdf:Alt><rdf:li xml:lang="x-default">'
+              "Isn&apos;t it &amp; more</rdf:li></rdf:Alt></dc:title>")
+    assert pdf_tags.declared_title(packet) == "Isn't it & more"

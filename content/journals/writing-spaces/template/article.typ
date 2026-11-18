@@ -109,8 +109,11 @@
   body,
 )
 
+// The title goes in as a filled string, not as markup: Typst flattens a
+// markup title's smart quotes to straight ones when it writes the metadata,
+// so “Isn’t it, like, outdated?” reached the PDF as "Isn't it ...".
 #set document(
-  $if(title)$title: [$title$],$endif$
+  $if(title)$title: GRAPHION_TITLE_STRING,$endif$
   author: (GRAPHION_AUTHORS_PLACEHOLDER),
   keywords: (GRAPHION_KEYWORDS_PLACEHOLDER),
 )

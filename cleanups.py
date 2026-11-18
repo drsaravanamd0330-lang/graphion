@@ -159,6 +159,109 @@ def close_up_broken_em_dashes(text: str, log: CleanupLog) -> str:
     return text
 
 
+# A URL that a line break split, rejoined by ingest with a space. The part
+# before the space ends on a character a URL breaks after (a dot, a slash, a
+# hyphen, an underscore, a query or fragment separator), and the part after
+# it carries URL punctuation of its own, which is what keeps a URL that
+# ends a sentence from swallowing the next word: "…example.org/ and then"
+# is left alone, "creativecommons. org/licenses/" is rejoined.
+_SPLIT_URL_RE = re.compile(
+    r"(?P<head>\bhttps?://[^\s<>()\[\]*]*?[./\-_=?&#])[ \t]+"
+    r"(?P<tail>[a-z0-9][^\s<>()\[\]*]*?[./\-_=?&#%][^\s<>()\[\]*]*)")
+
+
+def rejoin_split_urls(text: str, log: CleanupLog) -> str:
+    """Close up a URL that a line break split.
+
+    PDF ingest rejoins lines with a space, so a URL the page broke across two
+    lines comes through as two words and links to its first half. Writing
+    Spaces 7 lost 189 links that way, among them the licence link in all 31
+    chapters that print one ("http://creativecommons. org/licenses/..."), and
+    nothing reported it: lint's URL check and pa11y both see a link.
+
+    A URL can break in several places, so the pass repeats until nothing
+    more joins.
+    """
+    count = 0
+    while True:
+        text, n = _SPLIT_URL_RE.subn(r"\g<head>\g<tail>", text)
+        if not n:
+            break
+        count += n
+    log.record("rejoin_split_urls", count)
+    return text
+
+
+_BULLET_GLYPHS = "•○"
+
+
+def bullets_to_lists(text: str, log: CleanupLog) -> str:
+    """Rebuild a bulleted list that ingest read as one quoted paragraph.
+
+    Writing Spaces 7 sets its bulleted lists indented, and ingest takes an
+    indented block for a quotation and joins its lines, so a list came
+    through as "> • First item. • Second item." 289 items in 17 chapters and
+    the teaching resources ran together that way. A screen reader announces
+    one quotation instead of a list of so many items, which fails WCAG 1.3.1,
+    and verapdf and pa11y both pass it, because the markup is valid.
+
+    A paragraph that opens with a bullet glyph is split at each glyph into
+    list items. A hollow bullet is the second level, nested under the item
+    before it; a paragraph that opens with one is the continuation of the
+    list above. An item ending in a colon between two others is a lead-in
+    and stays a paragraph. Italics a line break closed and reopened
+    ("*for* *a paper*") are rejoined, since an item is now one line.
+    """
+    blocks = re.split(r"(\n[ \t]*\n)", text)
+    items_made = 0
+    for i, block in enumerate(blocks):
+        stripped = block.strip()
+        if not stripped or i % 2:
+            continue
+        unquoted = " ".join(re.sub(r"^\s*>\s?", "", line)
+                            for line in stripped.splitlines()).strip()
+        if not unquoted:
+            continue
+        # A list can also follow a lead-in on the same line, "…prompts: •
+        # What…", which is how Writing Spaces 7's teaching resources set the
+        # bullets inside a numbered activity. The lead-in keeps its own line;
+        # under a numbered or bulleted item the list nests beneath it.
+        preamble = ""
+        if unquoted[0] not in _BULLET_GLYPHS:
+            lead = re.search(r":\s*•", unquoted)
+            if not lead:
+                continue
+            preamble = unquoted[:lead.start() + 1].strip()
+            unquoted = unquoted[lead.start() + 1:].strip()
+        indent = "    " if re.match(r"^(?:\d+[.)]|[-*+])\s", preamble) else ""
+        tops = [p.strip() for p in unquoted.split("•")]
+        tops = [p for p in tops if p]
+        lines = []
+        for k, top in enumerate(tops):
+            head, *subs = [p.strip() for p in top.split("○")]
+            head = re.sub(r"\* \*", " ", head)
+            if head:
+                lead_in = (head.endswith(":") and 0 < k < len(tops) - 1
+                           and not subs and len(head) < 80)
+                if lead_in:
+                    lines += ["", head, ""]
+                else:
+                    lines.append(f"{indent}- {head}")
+                    items_made += 1
+            for sub in subs:
+                if sub:
+                    lines.append(f"{indent}    - " + re.sub(r"\* \*", " ", sub))
+                    items_made += 1
+        listed = "\n".join(lines).strip("\n")
+        if preamble:
+            listed = preamble + ("\n" if indent else "\n\n") + listed
+        lead = block[:len(block) - len(block.lstrip())]
+        trail = block[len(block.rstrip()):]
+        blocks[i] = lead + listed + trail
+    log.record("bullets_to_lists", items_made)
+    return "".join(blocks)
+
+
 def blank_line_before_heading(text: str, log: CleanupLog) -> str:
     """Give every heading the blank line Pandoc needs to read it as one.
 
@@ -581,7 +684,9 @@ _WORKS_CITED_HEADING_RE = re.compile(
     # Match either a Markdown heading ("# Works Cited") or a bare line
     # ("Works Cited" on its own). Pandoc doesn't always promote Word's
     # works-cited paragraph to a heading if the author didn't style it.
-    r"^(?:#{1,6}\s+)?(works cited|references|bibliography)\s*$",
+    # "Work Cited" is the singular a chapter with one source prints
+    # (Writing Spaces 7, chapter 5), and it is the same section.
+    r"^(?:#{1,6}\s+)?(works? cited|references|bibliography)\s*$",
     re.IGNORECASE | re.MULTILINE,
 )
 
@@ -1604,8 +1709,12 @@ DEFAULT_PASSES: List[Pass] = [
     convert_single_cell_tables_to_blockquotes,
     convert_pandoc_div_footnotes_to_native,
     repair_footnote_definitions,
+    # Before the list pass below, so lists it rebuilds are what that sees.
+    bullets_to_lists,
     conservative_list_normalization,
     strip_orphan_page_numbers,
+    # Before normalize_dashes, which would read a URL's "--" as a dash.
+    rejoin_split_urls,
     normalize_dashes,
     # Directly after the pass that writes "---", since this one tidies what
     # that leaves where a line break fell on a dash.

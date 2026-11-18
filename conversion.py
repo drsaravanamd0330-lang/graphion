@@ -497,7 +497,8 @@ def carry_editor_fields(front_matter: dict, previous: str) -> tuple:
 
 
 def ingest_pdf(pdf_path: Path, article_path: Path,
-               skip_image_digests=frozenset()) -> IngestResult:
+               skip_image_digests=frozenset(),
+               matter: bool = False) -> IngestResult:
     """Reconstruct Markdown from a typeset PDF, write `article-raw.md`.
 
     A DOCX still knows what a paragraph is, so Pandoc can be handed the file.
@@ -526,8 +527,10 @@ def ingest_pdf(pdf_path: Path, article_path: Path,
         shutil.copy2(pdf_path, source_copy)
 
     t0 = time.time()
+    # `matter` is front or back matter, which has no overview to find.
     result = pdf_ingest.extract(source_copy, assets_dir=article_path / "assets",
-                                skip_image_digests=skip_image_digests)
+                                skip_image_digests=skip_image_digests,
+                                matter=matter)
     dt = time.time() - t0
 
     raw_md = article_path / "article-raw.md"
@@ -1188,6 +1191,19 @@ def teacher_resources_separate(fm: dict) -> bool:
     return str(fm.get("teacher-resources") or "").strip().lower() == "separate"
 
 
+def _nest_quotes(title: str) -> str:
+    """A title quoted inside a title takes single quotes for its own.
+
+    The teacher galley wraps the chapter title in double quotes, and a
+    chapter title that opens with a quotation printed as ““This Changes
+    Everything. Again”: …” across Writing Spaces 7. The printed teaching
+    resources nest them the usual way, “‘This Changes Everything. Again’: …”,
+    and so does this.
+    """
+    return (title.replace("“", "‘").replace("”", "’")
+                 .replace('"', "'"))
+
+
 def _teacher_front_matter(fm: dict) -> dict:
     """Front matter for the teacher galley, derived from the chapter's.
 
@@ -1196,7 +1212,7 @@ def _teacher_front_matter(fm: dict) -> dict:
     chapter number, the pagination assembly assigned it.
     """
     out = dict(fm)
-    title = plain_text(fm.get("title")) or ""
+    title = _nest_quotes(plain_text(fm.get("title")) or "")
     out["title"] = f"Teacher Resources for “{title}”" if title else "Teacher Resources"
     out["short-title"] = "Teacher Resources"
     for key in ("abstract", "chapter-number", "keywords", "doi", "subtitle",
@@ -1442,7 +1458,11 @@ def _fill_typst_authors(typ_text: str, fm: dict) -> str:
     # Running-head and footer strings. Same problem as authors: these sit in
     # string literals, and a value with quotation marks in it (a short title
     # that is itself a quotation) broke the literal.
+    # The document title takes the same route: as Typst markup its smart
+    # quotes reached the PDF metadata as straight ones, so the title a
+    # screen reader announces differed from the one printed.
     for key, sentinel in (
+        ("title", "GRAPHION_TITLE_STRING"),
         ("short-title", "GRAPHION_SHORT_TITLE_STRING"),
         ("short-authors", "GRAPHION_SHORT_AUTHORS_STRING"),
         ("footer", "GRAPHION_FOOTER_STRING"),

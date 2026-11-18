@@ -581,6 +581,44 @@ def column_runs(chars: list, order: dict, page_index: int,
     return runs
 
 
+# A raster that covers this much of the page is the page itself (a scan, a
+# full-bleed background), and text over it is the page's text layer.
+OVERLAY_MAX_PAGE_SHARE = 0.6
+
+
+def _overlay_regions(page) -> list:
+    """The boxes of figure-sized rasters on a page.
+
+    Text lying wholly inside one belongs to the picture: an OCR layer laid
+    over a screenshot, or a label set on a photograph. Read as body it came
+    through as prose, stranded after the footnotes: Writing Spaces 7 chapter
+    30's figure is a picture of a podcast script with an invisible text
+    layer, and its six paragraphs ("The re indeed was a time when Clemson")
+    arrived at the end of the chapter. A raster covering most of the page is
+    excluded, because over a scan the text layer is the page's only text.
+    """
+    try:
+        page_area = float(page.width) * float(page.height)
+        regions = []
+        for im in page.images:
+            w = float(im["x1"]) - float(im["x0"])
+            h = float(im["bottom"]) - float(im["top"])
+            if not big_enough(w, h) or w * h >= OVERLAY_MAX_PAGE_SHARE * page_area:
+                continue
+            regions.append((float(im["x0"]), float(im["top"]),
+                            float(im["x1"]), float(im["bottom"])))
+        return regions
+    except Exception:
+        return []
+
+
+def _inside_any(obj, regions: list, slack: float = 1.0) -> bool:
+    x0, top, x1, bottom = (float(obj["x0"]), float(obj["top"]),
+                           float(obj["x1"]), float(obj["bottom"]))
+    return any(x0 >= a - slack and x1 <= c + slack and top >= b - slack
+               and bottom <= d + slack for a, b, c, d in regions)
+
+
 def _page_lines(page, page_no: int, order: Optional[dict] = None) -> list:
     """Lines on one page, with the rotated margin furniture dropped.
 
@@ -598,7 +636,16 @@ def _page_lines(page, page_no: int, order: Optional[dict] = None) -> list:
     reaches the text is a per-page question and a page it does not reach
     must come through exactly as it did before.
     """
-    upright = page.filter(lambda obj: obj.get("upright", True))
+    over = _overlay_regions(page)
+
+    def keep(obj):
+        if not obj.get("upright", True):
+            return False
+        if over and obj.get("object_type") == "char" and _inside_any(obj, over):
+            return False
+        return True
+
+    upright = page.filter(keep)
     raw_lines = upright.extract_text_lines(return_chars=True, strip=True)
     if order:
         # The tree has to reach this page's text, by the measure
@@ -655,6 +702,7 @@ def _lines_from_chars(chars: list, raw: dict, page_no: int,
         # not a question of where the ink sits.
         chars = [dict(chars[0], x1=chars[1]["x0"])] + chars[1:]
         line_src = _extract_text(chars)
+    line_src = _recase_small_caps(line_src, chars)
     text, italic, fonts = _line_text(
         line_src, chars, _superscript_runs(chars, page_body)
     )
@@ -675,6 +723,86 @@ def _lines_from_chars(chars: list, raw: dict, page_no: int,
         dropcap=dropcap,
     ))
     return lines
+
+
+# A small-caps font, by the name the exporter gives it: "AGaramondPro-Bold-
+# SC700", "MinionPro-ItSC", "…SmallCaps".
+_SMALL_CAPS_FONT_RE = re.compile(
+    r"(?:[-_]|It|Italic|Bold|Semibold|Regular|Medium)SC\d*$|SmallCap|Small-Cap")
+# Words a title leaves in lower case unless they open it.
+_TITLE_SMALL_WORDS = {"a", "an", "and", "as", "at", "but", "by", "for", "from",
+                      "in", "into", "nor", "of", "on", "or", "the", "to",
+                      "vs", "via", "with"}
+
+
+def _small_caps_font(fontname: str) -> bool:
+    name = (fontname or "").split("+")[-1]
+    return bool(_SMALL_CAPS_FONT_RE.search(name))
+
+
+def _title_case(words: list, opens: bool) -> list:
+    out = []
+    for i, word in enumerate(words):
+        lower = word.lower()
+        bare = re.sub(r"^\W+|\W+$", "", lower)
+        if bare in _TITLE_SMALL_WORDS and not (opens and i == 0):
+            out.append(lower)
+        else:
+            m = re.search(r"[a-z]", lower)
+            out.append(lower[:m.start()] + lower[m.start()].upper()
+                       + lower[m.start() + 1:] if m else lower)
+    return out
+
+
+def _recase_small_caps(line_src: str, chars: list) -> str:
+    """Restore the case of text set in a small-caps font.
+
+    A small-caps font draws its lower case as small capitals, and the codes
+    it extracts as carry no reliable case: Writing Spaces 7's small-caps
+    heads came through as "searCh engine optimization: hoW searCh results",
+    "A NAtioN At Risk" and "Student diScuSSion QueStionS", and every
+    chapter's "Overview" head as "overvieW", which no rule recognised, so it
+    stayed in the text and was swept into the last Works Cited entry.
+
+    Where the case is lost it cannot be read back, so a run of small caps
+    is set the way a heading is: title case, function words lower. A single
+    word on its own in small caps inside ordinary text is an acronym and is
+    set in capitals. The text is changed letter for letter and never
+    lengthened, so `_line_text` can still walk it in step with the
+    characters.
+    """
+    flags = [_small_caps_font(c.get("fontname", "")) for c in chars
+             if not c["text"].isspace()]
+    if not any(flags):
+        return line_src
+    whole_line = all(flags)
+    out = list(line_src)
+    positions = [i for i, ch in enumerate(line_src) if not ch.isspace()]
+    if len(positions) != len(flags):
+        return line_src
+    # Group consecutive small-caps positions (spaces between them included)
+    # into runs, and recase each run word by word.
+    runs, start = [], None
+    for k, pos in enumerate(positions):
+        if flags[k] and start is None:
+            start = k
+        if start is not None and (not flags[k] or k == len(positions) - 1):
+            end = k if flags[k] else k - 1
+            runs.append((positions[start], positions[end] + 1))
+            start = None
+    for a, b in runs:
+        segment = line_src[a:b]
+        words = segment.split(" ")
+        multiword = len([w for w in words if w]) > 1
+        if multiword or whole_line:
+            # A run is a phrase set apart (a head, a title), so its first
+            # word is capitalised whatever it is.
+            cased = " ".join(_title_case(words, opens=True))
+        else:
+            cased = segment.upper()
+        if len(cased) == len(segment):
+            out[a:b] = list(cased)
+    return "".join(out)
 
 
 def _extract_text(chars: list) -> str:
@@ -839,6 +967,24 @@ def join_lines(lines: list, vocab: set, compounds: set) -> str:
 # ---------- structure ----------
 
 
+def is_small_caps_head(line: Line) -> bool:
+    """A short line set wholly in a bold small-caps face, not a sentence.
+
+    Writing Spaces 7 sets some subheads in bold small caps, whose glyphs
+    measure below the body size, so size read "Search Engine Optimization:
+    How Search Results Find You" as a footnote. Bold is required because
+    the series sets its running heads in roman small caps, and those are
+    furniture.
+    """
+    fonts = [f.split("+")[-1] for f in (line.fonts or set())]
+    if not fonts or not all(_small_caps_font(f) for f in fonts):
+        return False
+    if not any("Bold" in f or "Semibold" in f for f in fonts):
+        return False
+    text = line.plain.strip()
+    return 0 < len(text) <= 100 and not _STATED_SENTENCE_RE.search(text)
+
+
 def classify(line: Line, layout: Layout) -> str:
     """What kind of line this is, by size and position.
 
@@ -857,6 +1003,8 @@ def classify(line: Line, layout: Layout) -> str:
     if line.size > layout.body_size + HEAD_SIZE_DELTA:
         centred = abs(line.centre - layout.page_centre) < 12
         return "head" if centred else "title"
+    if is_small_caps_head(line):
+        return "head"
     if line.size < layout.body_size - 0.5:
         return "note"
     if line.x0 > layout.body_left + QUOTE_INSET_MIN:
@@ -1024,6 +1172,33 @@ def split_dropcap(text: str, vocab: set) -> str:
     return text
 
 
+# A paragraph's text has finished its sentence: a stop, a question or an
+# exclamation, or a colon, optionally closed by a quotation mark, a bracket,
+# emphasis or a footnote reference.
+_ENDS_SENTENCE_RE = re.compile(
+    r"[.!?:][\"”’')\]*]*(?:\[\^[^\]\s]+\])?[\"”’')*]*\s*$")
+
+
+def _continues_inset(prev_body, line: Line, layout: Layout) -> bool:
+    """Whether an indented line carries on a block set inset as a whole.
+
+    The series marks a paragraph by its first-line indent, so `assemble`
+    starts one at every indented line. A box or a quoted draft set inset as
+    a whole is indented on every line, and came through a line to a
+    paragraph: Writing Spaces 7 chapter 10's "Practice" boxes printed ten
+    one-line paragraphs, and volume 5's `8-diab` its quoted student draft.
+    A line at the same inset as the body line above it, on the same page,
+    under a line that had not finished its sentence, is that line's
+    continuation. A one-line paragraph ends its sentence, so a run of them
+    still opens a paragraph each.
+    """
+    return (prev_body is not None
+            and prev_body.page == line.page
+            and prev_body.x0 > layout.body_left + INDENT_MIN
+            and abs(prev_body.x0 - line.x0) <= 1.5
+            and not _ENDS_SENTENCE_RE.search(prev_body.plain))
+
+
 def assemble(lines: list, layout: Layout, vocab: set, compounds: set,
              report: Optional[dict] = None) -> list:
     """Group classified lines into blocks of Markdown.
@@ -1058,11 +1233,20 @@ def assemble(lines: list, layout: Layout, vocab: set, compounds: set,
     prev_indented = False
     in_list = False
     prev_line = None
+    # The last body paragraph, held so a paragraph the page's footnotes
+    # interrupted can be reopened on the next page: (block index, its lines,
+    # whether it opened on a dropped initial). Cleared by anything but a
+    # note, because only notes may stand between the two halves.
+    last_body = None
+    # The last line read as body, for telling a paragraph's first-line
+    # indent from a whole block set inset.
+    prev_body = None
 
     def flush():
-        nonlocal buffer, kind, had_dropcap
+        nonlocal buffer, kind, had_dropcap, last_body
         if not buffer:
             return
+        opened_on_initial = had_dropcap
         text = join_lines(buffer, vocab, compounds)
         if had_dropcap:
             text = split_dropcap(text, vocab)
@@ -1093,9 +1277,39 @@ def assemble(lines: list, layout: Layout, vocab: set, compounds: set,
                 text = stated
                 if buffer[0].heading_level > 1:
                     out_kind = "head%d" % min(buffer[0].heading_level, 6)
+        if (out_kind == "note" and not _NOTE_RE.match(text)
+                and not (is_figure_caption(text) or is_table_caption(text)
+                         or is_bare_label(text))
+                and body_follows.get(id(buffer[-1]))):
+            # Footnote-sized type with the body carrying on below it on the
+            # same page is not a footnote, which is always the last thing on
+            # its page. It is a box, a caption no rule recognised, a label:
+            # text that belongs where it is printed. Treated as a note
+            # continuation it was moved to the end of the chapter, which is
+            # how seven Writing Spaces 7 chapters ended in a table caption,
+            # a boxed reference entry, or a subhead after their footnotes.
+            out_kind = "inset"
         blocks.append((out_kind, text))
+        if out_kind == "body":
+            last_body = (len(blocks) - 1, list(buffer), opened_on_initial)
+        elif out_kind != "note" or is_figure_caption(text) or \
+                is_table_caption(text) or is_bare_label(text):
+            last_body = None
         buffer = []
         kind = None
+
+    # Whether running text follows each line on its own page, read from the
+    # bottom of each page up. A footnote never has any. A caption counts as
+    # text that follows: it is never in a page's foot, and Writing Spaces 7
+    # chapter 7 sets a boxed reference entry with only its figure's caption
+    # below it on the page.
+    body_follows: dict = {}
+    seen_below: dict = {}
+    for line in reversed(lines):
+        body_follows[id(line)] = seen_below.get(line.page, False)
+        if (classify(line, layout) in ("body", "head", "title", "quote")
+                or is_figure_caption(line.plain) or is_table_caption(line.plain)):
+            seen_below[line.page] = True
 
     pending_initial: Optional[str] = None
     for line in lines:
@@ -1140,8 +1354,11 @@ def assemble(lines: list, layout: Layout, vocab: set, compounds: set,
                 dropcap_run = False
 
         if this in ("head", "title"):
+            # "Work Cited" is what a chapter with one source prints; missing
+            # it read Writing Spaces 7 chapter 5's only entry as a footnote
+            # and moved it to the end of the chapter.
             hanging = line.plain.strip().lower().startswith(
-                ("works cited", "references", "bibliography")
+                ("works cited", "work cited", "references", "bibliography")
             )
             in_list = False
 
@@ -1197,6 +1414,7 @@ def assemble(lines: list, layout: Layout, vocab: set, compounds: set,
                 and kind in (None, "body")
                 and not dropcap_run
                 and indented
+                and not _continues_inset(prev_body, line, layout)
             )
         prev_indented = indented
 
@@ -1221,12 +1439,41 @@ def assemble(lines: list, layout: Layout, vocab: set, compounds: set,
             this == "head" and kind == "head" and buffer
             and (buffer[0].heading_level or 0) != (line.heading_level or 0)
         )
+
+        # A paragraph that runs over a page with footnotes at its foot is
+        # interrupted by them: the note lines come between its two halves,
+        # so it was closed at the foot of one page and the rest of it opened
+        # a new paragraph on the next. Writing Spaces 7 puts its licence note
+        # under the opening paragraph, and about eighteen chapters split
+        # their first paragraph mid-sentence ("or play" / "music."). The
+        # second half is no paragraph start (no indent, no initial), the
+        # first half had not finished its sentence, and only notes stand
+        # between them, so the first is reopened.
+        if (this == "body" and kind in (None, "note") and not starts_para
+                and not indented and not line.dropcap
+                and last_body is not None
+                and last_body[1][-1].page < line.page
+                and not _ENDS_SENTENCE_RE.search(blocks[last_body[0]][1])):
+            flush()
+            index, held, opened_on_initial = last_body
+            if index < len(blocks) and blocks[index][0] == "body":
+                blocks.pop(index)
+                buffer = held
+                kind = "body"
+                had_dropcap = opened_on_initial
+                last_body = None
+                buffer.append(line)
+                prev_body = line
+                continue
+
         if kind is not None and (this != kind or starts_para or is_note_start
                                  or is_caption or gap_break or level_changed):
             flush()
         if kind is None:
             kind = this
         buffer.append(line)
+        if this == "body":
+            prev_body = line
 
         if line.dropcap:
             had_dropcap = True
@@ -1332,14 +1579,81 @@ def blocks_to_markdown(blocks: list, abstract: str = "") -> str:
                 notes.append(f"[^{match.group(1)}]: {text[match.end():]}")
             elif match:
                 out.append(escape_list_marker(text))
+            elif notes and notes[-1].startswith("[^"):
+                # Unnumbered note text at a page's foot is the note before it
+                # running over the page. Kept apart, it became a paragraph of
+                # its own after the definitions: Writing Spaces 7 chapter
+                # 15's note on the IELTS prompt ended at "To what" and the
+                # rest of the question printed after the notes.
+                notes[-1] = f"{notes[-1]} {text}"
             else:
                 notes.append(escape_list_marker(text))
         else:
             out.append(text)
+    out, notes = _separate_restarted_notes(out, notes, abstract)
     body = "\n\n".join(out).strip()
     if notes:
         body += "\n\n" + "\n\n".join(notes)
     return body.strip() + "\n"
+
+
+_NOTE_DEF_LABEL_RE = re.compile(r"^\[\^([^\]\s]+)\]:")
+
+
+def _separate_restarted_notes(out: list, notes: list, abstract) -> tuple:
+    """Give each note its own label where the numbering restarts.
+
+    A note's label is the number printed beside it, and a number is not an
+    identity. Writing Spaces 7 numbers the licence note 1 and the author's
+    first note 1 as well, so a chapter carried two `[^1]` definitions;
+    Pandoc keeps the first, warns, and drops the second, which is how six
+    chapters lost an author's note with every checker passing. A collected
+    teaching-resources file restarts at 1 in each of its 32 sections, and
+    every one of them resolved to the copyright page's note.
+
+    The definitions are gathered in the order their notes are printed, and
+    a note follows the reference it belongs to, so the k-th definition of a
+    number answers the k-th reference to it, counting the Overview's first
+    because it is read first. The second and later ones are relabelled
+    `n-2`, `n-3`, in the body and in the definition alike. A number with one
+    definition is left alone however often it is referred to, because a
+    note can be cited twice.
+    """
+    counts: dict = {}
+    for note in notes:
+        match = _NOTE_DEF_LABEL_RE.match(note)
+        if match:
+            counts[match.group(1)] = counts.get(match.group(1), 0) + 1
+    repeated = {label for label, n in counts.items() if n > 1}
+    if not repeated:
+        return out, notes
+
+    seen = {label: 0 for label in repeated}
+    for label in _FOOTNOTE_KEY_RE.findall(abstract or ""):
+        if label in seen:
+            seen[label] += 1
+
+    def relabel(match):
+        label = match.group(1)
+        if label not in seen:
+            return match.group(0)
+        seen[label] += 1
+        k = seen[label]
+        return match.group(0) if k == 1 else f"[^{label}-{k}]"
+
+    out = [_FOOTNOTE_KEY_RE.sub(relabel, text) for text in out]
+
+    defined = {label: 0 for label in repeated}
+    fixed = []
+    for note in notes:
+        match = _NOTE_DEF_LABEL_RE.match(note)
+        if match and match.group(1) in defined:
+            defined[match.group(1)] += 1
+            k = defined[match.group(1)]
+            if k > 1:
+                note = f"[^{match.group(1)}-{k}]:" + note[match.end():]
+        fixed.append(note)
+    return out, fixed
 
 
 # ---------- front matter ----------
@@ -1363,7 +1677,8 @@ def is_initial(line: Line) -> bool:
     return len(text) == 1 and text.isalpha()
 
 
-def extract_front_matter(first_page_lines: list, layout: Layout) -> tuple:
+def extract_front_matter(first_page_lines: list, layout: Layout,
+                         matter: bool = False) -> tuple:
     """Pull the title, chapter number, byline and Overview off page one.
 
     The opening page is the only one whose layout is not the body layout,
@@ -1416,7 +1731,23 @@ def extract_front_matter(first_page_lines: list, layout: Layout) -> tuple:
     )
     if byline is not None:
         consumed.add(id(byline))
-        names = _split_authors(byline.plain)
+        text = byline.plain.strip()
+        # A long byline wraps. Writing Spaces 7 chapter 29 sets four authors
+        # over two lines, and the second, "and Bridget Gelms", was read as a
+        # heading in the body while the front matter lost her. The next
+        # italic line at the byline's size carries on when the first ends
+        # on a comma or the second opens with "and".
+        at = first_page_lines.index(byline)
+        for nxt in first_page_lines[at + 1:at + 3]:
+            if (id(nxt) not in consumed and nxt.italic
+                    and abs(nxt.size - byline.size) <= 0.5
+                    and (text.endswith(",") or
+                         re.match(r"(?i)^(and|&)\s", nxt.plain.strip()))):
+                consumed.add(id(nxt))
+                text = f"{text} {nxt.plain.strip()}"
+            else:
+                break
+        names = _split_authors(text)
         if names:
             fm["author"] = [{"name": n} for n in names]
     else:
@@ -1448,11 +1779,16 @@ def extract_front_matter(first_page_lines: list, layout: Layout) -> tuple:
             overview.append(line)
             consumed.add(id(line))
 
-    if not overview:
+    if not overview and not matter:
         # The series opens every chapter with an overview, but it does not
         # always put a head on one: chapter 20 of volume 5 runs its straight
         # on from the byline. Prose above the first head of a chapter whose
         # title and byline have already been taken is that overview.
+        #
+        # A chapter, and only a chapter. Front and back matter has no
+        # overview, and on Writing Spaces 7's contributors list this took
+        # the whole first page, seven biographies run into one paragraph,
+        # for an abstract printed under an "Overview" head.
         for line in first_page_lines:
             if id(line) in consumed:
                 continue
@@ -1882,6 +2218,46 @@ def figure_anchors_from_holes(lines: list, layout: Layout, figures: list,
     return anchors
 
 
+def apply_stated_alts(outline, figures: list) -> int:
+    """Give each figure the description its file already states.
+
+    A tagged PDF can carry a /Alt on each /Figure, and `assess.py` counts a
+    figure with one as described and not owed. Ingest threw them away and
+    wrote the caption or a placeholder over every figure, so the two
+    disagreed about the same file: Writing Spaces 7 chapter 2 states eight
+    descriptions, which `assess` credited and the rebuild then asked an
+    editor to write again.
+
+    The tree says which page a figure is on but not which raster it is, so
+    a page's described figures are paired with its extracted rasters in
+    order, and only on a page where the two counts agree. Anything less
+    certain is left to the caption or the placeholder, which the register
+    goes on counting as owed. An editor's own description still wins: it is
+    carried over this by `conversion.carry_alt_text` on a re-ingest.
+    """
+    if outline is None or not figures:
+        return 0
+    stated: dict = {}
+    for element in getattr(outline, "elements", []) or []:
+        if element.is_figure and element.page is not None:
+            stated.setdefault(element.page, []).append(element)
+    on_page: dict = {}
+    for figure in figures:
+        on_page.setdefault(figure["page"], []).append(figure)
+    applied = 0
+    for page, figs in on_page.items():
+        # The tree counts pages from zero, a figure from one.
+        tree = stated.get(page - 1, [])
+        if len(tree) != len(figs):
+            continue
+        for figure, element in zip(sorted(figs, key=lambda f: f["index"]), tree):
+            alt = " ".join(str(element.alt or "").split()).replace("](", "] (")
+            if alt:
+                figure["stated_alt"] = alt
+                applied += 1
+    return applied
+
+
 def place_figures(blocks: list, figures: list, caption_pages: dict,
                   figure_anchors: Optional[dict] = None) -> tuple:
     """Put each figure into the blocks, beside the caption that names it.
@@ -1950,8 +2326,9 @@ def place_figures(blocks: list, figures: list, caption_pages: dict,
             # the page and one block here, and the block is the joined,
             # de-hyphenated text: reading the line instead cut 36 of the 95
             # figures' alt text short, 13 of them mid-word on a hyphen.
-            alt = caption_alt_text(block[1]) if caption else \
-                undescribed_alt(figure["page"])
+            alt = figure.get("stated_alt") or (
+                caption_alt_text(block[1]) if caption else
+                undescribed_alt(figure["page"]))
             image = f"![{alt}](assets/{figure['name']})"
             if caption:
                 out.append(("figure", f"{image}\\\n{block[1]}"))
@@ -1963,7 +2340,7 @@ def place_figures(blocks: list, figures: list, caption_pages: dict,
     for position in sorted(inserts):
         for figure, caption in inserts[position]:
             out.append(("figure",
-                        f"![{undescribed_alt(figure['page'])}]"
+                        f"![{figure.get('stated_alt') or undescribed_alt(figure['page'])}]"
                         f"(assets/{figure['name']})"))
 
     if figures:
@@ -2602,7 +2979,73 @@ def _split_authors(byline: str) -> list:
     return [p.strip() for p in text.split(",") if p.strip()]
 
 
+_CONTENTS_HEAD_RE = re.compile(r"^(?:table of )?contents$", re.I)
+# An entry ends on its page number, arabic or roman, set off by a space or a
+# leader of dots.
+_CONTENTS_ENTRY_RE = re.compile(r"(?:\s|\.{2,})(?:\d{1,4}|[ivxlc]{1,7})\s*$")
+
+
+def contents_pages(lines: list) -> set:
+    """The pages of a printed table of contents, by what they hold.
+
+    Writing Spaces 7's front matter sets its contents in display type, so
+    each entry read as a heading and the galley opened on thirty of them.
+    A contents page is the one headed "Contents" whose lines mostly end on
+    a page number, together with the pages straight after it that are made
+    the same way. Nothing else in a chapter is shaped like that, and a page
+    with the head and ordinary prose under it is kept.
+    """
+    by_page: dict = {}
+    for line in lines:
+        by_page.setdefault(line.page, []).append(line)
+
+    def entry_share(page_lines):
+        text = [l.plain.strip() for l in page_lines if l.plain.strip()]
+        if len(text) < 4:
+            return 0.0
+        return sum(1 for t in text if _CONTENTS_ENTRY_RE.search(t)) / len(text)
+
+    pages: set = set()
+    for page in sorted(by_page):
+        heads = any(_CONTENTS_HEAD_RE.match(l.plain.strip())
+                    for l in by_page[page])
+        if (heads or (page - 1) in pages) and entry_share(by_page[page]) >= 0.3:
+            pages.add(page)
+    return pages
+
+
 # ---------- entry point ----------
+
+
+# The largest backwards step a line can take through the file's order and
+# still be read in place. An inline element (a run of italic, a link, a
+# quotation set as its own span) is its own structure element, so the line
+# carrying it can sit a few ids behind the line before it with nothing
+# wrong. Measured over all seven Writing Spaces volumes, 152 chapters: every
+# descent is 23 or under, or 240 and over, with nothing between. The large
+# ones are the two real faults, two columns read across each other and a
+# pull quote spliced through a heading. The small ones are this noise, and
+# Writing Spaces 7 chapter 6, which italicises every quotation, reported
+# eight of them and failed the check on prose read in exactly the right
+# order.
+INLINE_ORDER_JUMP = 24
+
+
+def reading_order_record(order_check) -> dict:
+    """What `lint.check_reading_order` reads, from one measurement.
+
+    `descents` counts only steps larger than `INLINE_ORDER_JUMP`; the small
+    ones are kept apart as `inline-jumps` so the count is not mistaken for a
+    clean reading where it is not one.
+    """
+    displaced = [d for d in order_check.descents if d.gap > INLINE_ORDER_JUMP]
+    return {
+        "descents": len(displaced),
+        "inline-jumps": len(order_check.descents) - len(displaced),
+        "worst": max((d.gap for d in displaced), default=0),
+        "placed": order_check.placed,
+        "unplaced": order_check.unplaced,
+    }
 
 
 def measure_reading_order(outline, lines: list):
@@ -2703,7 +3146,8 @@ def _take_stated_headings(pdf_path: Path, lines: list,
 def extract(pdf_path: Path, genre_heads: Optional[tuple] = None,
             assets_dir: Optional[Path] = None,
             skip_image_digests=frozenset(),
-            read_structure: bool = True) -> IngestResult:
+            read_structure: bool = True,
+            matter: bool = False) -> IngestResult:
     """Read a PDF chapter into front matter plus Markdown body.
 
     With `assets_dir`, the figures are written there and placed in the body.
@@ -2790,6 +3234,15 @@ def extract(pdf_path: Path, genre_heads: Optional[tuple] = None,
     kept, dropped = strip_furniture(all_lines, layout)
     notes.append(f"Dropped {len(dropped)} line(s) of page furniture.")
 
+    contents = contents_pages(kept)
+    if contents:
+        kept = [l for l in kept if l.page not in contents]
+        notes.append(
+            f"Left out {len(contents)} contents page(s) (page "
+            f"{', '.join(str(p) for p in sorted(contents))}): a list of titles "
+            f"and page numbers came through as a heading per entry, and the "
+            f"issue's own contents are generated from its articles.")
+
     # After the furniture is gone, because a file can call its running
     # heads a heading level and mean it: volume 2's chapters map
     # `Running_Headers` to H5, so the author's name and the folio are
@@ -2813,7 +3266,8 @@ def extract(pdf_path: Path, genre_heads: Optional[tuple] = None,
     opening = cover + 1
     first_page = [l for l in kept if l.page == opening]
     rest = [l for l in kept if l.page > opening]
-    fm, overview_lines, consumed, fm_notes = extract_front_matter(first_page, layout)
+    fm, overview_lines, consumed, fm_notes = extract_front_matter(
+        first_page, layout, matter=matter)
     notes.extend(fm_notes)
 
     if overview_lines:
@@ -2831,17 +3285,13 @@ def extract(pdf_path: Path, genre_heads: Optional[tuple] = None,
     # what `assemble` groups rather than rearranges.
     order_check = measure_reading_order(outline, body_lines)
     if order_check.read:
-        fm["reading-order"] = {
-            "descents": len(order_check.descents),
-            "worst": order_check.worst,
-            "placed": order_check.placed,
-            "unplaced": order_check.unplaced,
-        }
-        if order_check.descents:
-            worst = max(order_check.descents, key=lambda d: d.gap)
+        fm["reading-order"] = reading_order_record(order_check)
+        displaced = [d for d in order_check.descents if d.gap > INLINE_ORDER_JUMP]
+        if displaced:
+            worst = max(displaced, key=lambda d: d.gap)
             notes.append(
                 f"The body runs backwards through the file's own reading "
-                f"order in {len(order_check.descents)} place(s), the worst "
+                f"order in {len(displaced)} place(s), the worst "
                 f"by {worst.gap} marked id(s): "
                 f"{worst.before[:48]!r} then {worst.after[:48]!r}.")
 
@@ -2896,6 +3346,10 @@ def extract(pdf_path: Path, genre_heads: Optional[tuple] = None,
                     lines[figure["index"]].plain
         figure_anchors = figure_anchors_from_holes(
             kept, layout, figures, caption_pages, set(tables_by_page))
+        stated_alts = apply_stated_alts(outline, figures)
+        if stated_alts:
+            notes.append(f"{stated_alts} figure(s) took the description the "
+                         f"file itself states in its structure tree.")
         blocks, figure_notes = place_figures(blocks, figures, caption_pages,
                                              figure_anchors)
         notes.extend(figure_notes)

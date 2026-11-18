@@ -136,7 +136,7 @@
 // Python after Pandoc emits the file, with proper backslash-escaping
 // for embedded quotes.
 #set document(
-  $if(title)$title: [$title$],$endif$
+  $if(title)$title: GRAPHION_TITLE_STRING,$endif$
   author: (GRAPHION_AUTHORS_PLACEHOLDER),
   keywords: (GRAPHION_KEYWORDS_PLACEHOLDER),
 )

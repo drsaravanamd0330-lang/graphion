@@ -11,6 +11,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import conversion
 import pdf_ingest
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
 
 def _scratch_article(initial_yaml_body: str) -> Path:
     tmp = Path(tempfile.mkdtemp())
@@ -148,6 +150,24 @@ def test_running_head_strings_are_escaped_for_typst():
     assert '#let short-title-val = "\u201cTeaching Must Be Our Demonstration!\u201d"' in out
     assert '#let short-authors-val = "Pell & \\"Duffy\\""' in out
     assert '#let footer-val = ""' in out
+
+
+def test_the_document_title_is_a_string_and_keeps_its_quotes():
+    """As Typst markup the title's smart quotes reached the PDF metadata
+    straightened, so Writing Spaces 7's chapter 16 announced itself as
+    "Isn't it" while printing “Isn’t it”."""
+    typ = "#set document(title: GRAPHION_TITLE_STRING)\n"
+    fm = {"title": "“Isn’t it, *like*, outdated?”"}
+    out = conversion._fill_typst_authors(typ, fm)
+    assert out == '#set document(title: "“Isn’t it, like, outdated?”")\n'
+
+
+def test_both_bundles_fill_the_title_rather_than_mark_it_up():
+    for bundle in ("writing-spaces", "lics"):
+        typ = (REPO_ROOT / "content" / "journals" / bundle / "template"
+               / "article.typ").read_text(encoding="utf-8")
+        assert "title: GRAPHION_TITLE_STRING" in typ
+        assert "title: [$title$]" not in typ
 
 
 def test_epub_is_stale_after_article_edit():

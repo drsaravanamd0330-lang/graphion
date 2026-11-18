@@ -53,9 +53,15 @@ def _add_article(store, slug, galleys=("article.pdf", "article.html")):
     return {"id": article_id, "slug": slug, "project_path": str(apath)}
 
 
-def _tools(monkeypatch, verapdf=True, pa11y=True):
+def _tools(monkeypatch, verapdf=True, pa11y=True, epubcheck=False):
+    """All three are stubbed. Stubbing two left epubcheck to whatever the
+    machine had, so on one with epubcheck installed a run told that both
+    other tools were missing went ahead with epubcheck alone and the
+    missing-tool test failed. It defaults to absent, which is what every
+    test here was written against."""
     monkeypatch.setattr(validators, "verapdf_available", lambda: verapdf)
     monkeypatch.setattr(validators, "pa11y_available", lambda: pa11y)
+    monkeypatch.setattr(validators, "epubcheck_available", lambda: epubcheck)
 
 
 def _run(monkeypatch, *argv):

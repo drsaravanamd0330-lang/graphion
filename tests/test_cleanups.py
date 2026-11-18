@@ -1074,3 +1074,100 @@ def test_licence_note_after_works_cited_is_not_merged_into_the_last_entry():
     assert "2006. Web.\n" in out
     assert "Web. \\*" not in out
     assert "\n\\* This work is licensed" in out
+
+
+# ---------- rejoin_split_urls ----------
+
+def test_rejoin_split_urls_closes_up_a_link_broken_at_a_dot():
+    """Writing Spaces 7 printed the licence link in 31 chapters across a
+    line break, and every galley linked to "http://creativecommons."."""
+    src = ("To view a copy of this license, visit http://creativecommons. "
+           "org/licenses/by-nc-nd/4.0/, email info@creativecommons.org.")
+    out = cleanups.rejoin_split_urls(src, _log())
+    assert "http://creativecommons.org/licenses/by-nc-nd/4.0/," in out
+
+
+def test_rejoin_split_urls_handles_several_breaks_in_one_url():
+    src = "https://cdn-dynmedia-1. microsoft.com/is/content/ presentations/x.pdf."
+    out = cleanups.rejoin_split_urls(src, _log())
+    assert out == "https://cdn-dynmedia-1.microsoft.com/is/content/presentations/x.pdf."
+
+
+def test_rejoin_split_urls_leaves_the_next_word_alone():
+    """A URL that ends a clause is followed by an ordinary word, which
+    carries no URL punctuation and is not joined."""
+    src = "See https://example.org/ and then read https://x.org. it is short."
+    assert cleanups.rejoin_split_urls(src, _log()) == src
+
+
+def test_rejoin_split_urls_leaves_a_capitalised_sentence_alone():
+    src = "Visit https://writingspaces.org. The site lists every volume."
+    assert cleanups.rejoin_split_urls(src, _log()) == src
+
+
+def test_rejoin_split_urls_is_idempotent():
+    src = "http://www. ursinus.edu/live/files/1157-five-organizational-modelspdf."
+    once = cleanups.rejoin_split_urls(src, _log())
+    assert cleanups.rejoin_split_urls(once, _log()) == once
+
+
+# ---------- bullets_to_lists ----------
+
+def test_bullets_to_lists_splits_a_quoted_run_of_bullets():
+    """An indented list came through as one quotation, read by a screen
+    reader as one paragraph."""
+    src = ("Prose.\n\n> • What am I feeling? • Have I felt this way "
+           "before?\n> • What emotions can I tap into?\n\nMore prose.\n")
+    out = cleanups.bullets_to_lists(src, _log())
+    assert out == ("Prose.\n\n- What am I feeling?\n- Have I felt this way "
+                   "before?\n- What emotions can I tap into?\n\nMore prose.\n")
+
+
+def test_bullets_to_lists_nests_a_hollow_bullet():
+    src = ("> • Poor Prompt: *Give me ideas.*\n\n"
+           "> ○ This prompt is far too vague.\n\n"
+           "> • Okay Prompt: *I need a topic for* *a paper.*\n")
+    out = cleanups.bullets_to_lists(src, _log())
+    assert out == ("- Poor Prompt: *Give me ideas.*\n\n"
+                   "    - This prompt is far too vague.\n\n"
+                   "- Okay Prompt: *I need a topic for a paper.*\n")
+
+
+def test_bullets_to_lists_keeps_a_lead_in_as_a_paragraph():
+    src = "> • One? • Two? • Some questions to prompt connections: • Three?\n"
+    out = cleanups.bullets_to_lists(src, _log())
+    assert "\n\nSome questions to prompt connections:\n\n" in out
+    assert out.count("\n- ") + out.startswith("- ") == 3
+
+
+def test_bullets_to_lists_leaves_a_paragraph_mentioning_a_bullet_alone():
+    src = "The menu reads Home • About • Contact across the top.\n"
+    assert cleanups.bullets_to_lists(src, _log()) == src
+
+
+def test_bullets_to_lists_is_idempotent():
+    src = "> • A. • B.\n\n> ○ B's sub-point.\n"
+    once = cleanups.bullets_to_lists(src, _log())
+    assert cleanups.bullets_to_lists(once, _log()) == once
+
+
+def test_both_new_passes_are_registered():
+    assert cleanups.rejoin_split_urls in cleanups.DEFAULT_PASSES
+    assert cleanups.bullets_to_lists in cleanups.DEFAULT_PASSES
+
+
+def test_bullets_after_a_lead_in_nest_under_a_numbered_item():
+    """Writing Spaces 7's teaching resources set bullets inside a numbered
+    activity, after a colon on the same line."""
+    src = ("1. Ask the class to read the essay and answer the following "
+           "prompts: • What is good English? • Who decides?\n")
+    out = cleanups.bullets_to_lists(src, _log())
+    assert out == ("1. Ask the class to read the essay and answer the following "
+                   "prompts:\n    - What is good English?\n    - Who decides?\n")
+    assert cleanups.bullets_to_lists(out, _log()) == out
+
+
+def test_bullets_after_a_lead_in_paragraph_follow_it():
+    src = "Consider these questions: • One? • Two?\n"
+    out = cleanups.bullets_to_lists(src, _log())
+    assert out == "Consider these questions:\n\n- One?\n- Two?\n"

@@ -244,11 +244,17 @@ def check_hyperlinks(article: dict, fm: dict, body: str) -> LintResult:
     return _ok("hyperlink-format", f"All {len(urls)} URL(s) look well-formed.")
 
 
+# One pattern for the section heading, shared by both checks that look for
+# it. "Work Cited" is the singular a chapter with one source prints, and
+# lint reported Writing Spaces 7 chapter 5 as having no references at all.
+_WORKS_CITED_HEADING_RE = re.compile(
+    r"^#{1,6}\s+(works? cited|references|bibliography)\s*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+
 def check_works_cited_present(article: dict, fm: dict, body: str) -> LintResult:
-    heading_re = re.compile(
-        r"^#{1,6}\s+(works cited|references|bibliography)\s*$",
-        re.IGNORECASE | re.MULTILINE,
-    )
+    heading_re = _WORKS_CITED_HEADING_RE
     if heading_re.search(body):
         return _ok("works-cited", "A Works Cited / References section is present.")
     return _warn(
@@ -267,10 +273,7 @@ def check_citations_match_references(article: dict, fm: dict, body: str) -> Lint
 
     Heuristic-only — final coverage waits on the BibTeX citation system.
     """
-    heading_re = re.compile(
-        r"^#{1,6}\s+(works cited|references|bibliography)\s*$",
-        re.IGNORECASE | re.MULTILINE,
-    )
+    heading_re = _WORKS_CITED_HEADING_RE
     m = heading_re.search(body)
     if not m:
         return _ok(
@@ -649,10 +652,25 @@ def check_figure_coverage(article: dict, fm: dict, body: str) -> LintResult:
     holds no images to fail and comes back "No images in the article". Both
     volumes of Writing Spaces passed that way while between them referring to
     258 figures that were not there.
+
+    A figure an editor has replaced with its own words, a picture of a table
+    turned into a table or a screenshot of prose into the prose, is still in
+    the galley; it is just no longer a picture, which is the fix WCAG 1.4.5
+    asks for. The printed caption cannot be the signal, because the archive's
+    unextracted figures left exactly that behind. So the editor records the
+    numbers in `transcribed-figures`, and those references count as present.
     """
     references = set(_FIGURE_NUMBER_RE.findall(body))
+    transcribed = {str(n).strip() for n in (fm.get("transcribed-figures") or [])
+                   if str(n).strip()}
+    references -= transcribed
     images = len(_IMAGE_RE.findall(body))
     if not references:
+        if transcribed:
+            return _ok("figure-coverage",
+                       f"{len(transcribed)} figure(s) transcribed into the text.",
+                       {"figures-referred-to": len(transcribed),
+                        "figures-referred-absent": 0})
         return _ok("figure-coverage", "The text refers to no figures.",
                    {"figures-referred-to": 0, "figures-referred-absent": 0})
     if images:

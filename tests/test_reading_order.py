@@ -535,3 +535,35 @@ def test_a_single_figure_is_not_called_an_artefact():
     )
 
     assert not structure.collects_figures_at_one_place(outline)
+
+
+def test_inline_jumps_are_kept_apart_from_displaced_text():
+    """Writing Spaces 7 chapter 6 italicises every quotation, and each
+    italic run is its own element; it reported eight descents of 9 to 18
+    ids over prose read in the right order. Across 152 chapters every
+    descent is 23 or under, or 240 and over."""
+    import pdf_ingest
+
+    check = structure.OrderCheck()
+    check.placed = 400
+    check.descents = [structure.Descent(index=i, gap=g, before="a", after="b")
+                      for i, g in enumerate([9, 11, 13, 18, 318, 343])]
+    record = pdf_ingest.reading_order_record(check)
+    assert record["descents"] == 2
+    assert record["inline-jumps"] == 4
+    assert record["worst"] == 343
+
+
+def test_a_chapter_with_only_inline_jumps_reads_as_clean():
+    import pdf_ingest
+
+    check = structure.OrderCheck()
+    check.placed = 400
+    check.descents = [structure.Descent(index=i, gap=g, before="a", after="b")
+                      for i, g in enumerate([9, 11, 13, 14, 15, 15, 18, 18])]
+    record = pdf_ingest.reading_order_record(check)
+    assert record["descents"] == 0 and record["worst"] == 0
+    import lint
+
+    assert lint.check_reading_order({}, {"reading-order": record},
+                                    "Prose.\n").level == "pass"

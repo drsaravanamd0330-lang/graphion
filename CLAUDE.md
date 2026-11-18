@@ -2247,6 +2247,50 @@ on one line. Do not lower that width.
 write; the last 5 versions are kept under `.versions/` (`VERSIONS_KEEP` in
 `config.py`).
 
+**Writing Spaces 7 was the first volume ingested after the toolbox was
+built, and what it exposed is now handled in ingest rather than by hand.**
+Each fix carries its own docstring and test; the list is here so the next
+new volume starts from it. Measured by re-ingesting the volume with the old
+and the new code on the same files: URLs split by a space at a line break
+145 to 0 (`cleanups.rejoin_split_urls`), bullet glyphs left in quoted
+paragraphs 223 to 0 (`cleanups.bullets_to_lists`), paragraphs split
+mid-sentence 30 to 0 (`assemble` reopens a paragraph the page's footnotes
+interrupted, and `_continues_inset` keeps a box set inset as one paragraph),
+blocks stranded after the notes 8 to 0 (small type with text or a caption
+below it on its page is `inset`, not a note; a note's run-over joins the
+note), duplicate note labels 6 to 0 (`_separate_restarted_notes`), and
+scrambled small caps 6 to 0 (`_recase_small_caps`). Ingest also carries a
+tagged figure's /Alt (`apply_stated_alts`), drops text laid over a figure
+raster (`_overlay_regions`), leaves out a printed contents page
+(`contents_pages`), keeps a wrapped byline, takes no overview from front or
+back matter (`matter=True`), and reads a bold small-caps line as a head.
+
+**A collected teacher-resources file is split, not skipped.**
+`ingest_volume.py` recognises one by name (`TEACHER_COLLECTION_RE`), ingests
+it once after the chapters, cuts it at its "Teacher Resources for …" heads
+and appends each section to its chapter as `# Teacher Resources` with
+`teacher-resources: separate`, so the existing split renders it. Sections
+pair with chapters by position when the counts agree, naming any whose title
+differs (volume 7's sixth still carries a working title), and by title
+otherwise. A chapter that already has the section keeps it unless
+`--replace`.
+
+**Descents of 24 marked ids or fewer are inline jumps, not displaced text.**
+`INLINE_ORDER_JUMP` was measured over all seven volumes: every descent is 23
+or under, or 240 and over. `reading_order_record` stores the small ones as
+`inline-jumps` and `descents` counts the rest, so a chapter that italicises
+every quotation no longer fails the check on prose read in order.
+
+**An issue that arrived on disk is indexed by `index_issue.py`.** A deploy
+seeds content onto the volume no-clobber and nothing put it in the database;
+see `docs/deployment.md`, "Publishing an issue ingested on another machine".
+An article's `toc-section` front matter is its table-of-contents section.
+
+**The Pandoc floor is 3.11.** Earlier Typst writers emit no image `alt:`, so
+every figure loses its description and the galley falls back from PDF/UA.
+The Dockerfile pinned 3.1.11 for a while; `tests/test_toolchain.py` holds
+the pin and checks the local Pandoc.
+
 ## Optional dependencies degrade, they do not crash
 
 The app probes for optional tooling and greys out UI rather than failing at

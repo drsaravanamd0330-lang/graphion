@@ -151,6 +151,33 @@ def test_text_referring_to_no_figures_passes():
     assert _coverage("Plain prose with no figures in it.\n").level == "pass"
 
 
+def test_a_figure_transcribed_into_the_text_counts_as_present():
+    """Writing Spaces 7 chapter 30 printed its Figure 1 as a picture of a
+    script; the rebuild sets the script as text, which is the WCAG 1.4.5
+    fix, and the check then reported a figure the galley does not have."""
+    body = ("Just glance at the excerpt (Figure 1).\n\n> The script.\n\n"
+            "Figure 1. A sample portion from a podcast script.\n")
+    assert _coverage(body).level == "warn"
+    result = lint.check_figure_coverage({}, {"transcribed-figures": [1]}, body)
+    assert result.level == "pass"
+    assert result.units["figures-referred-absent"] == 0
+
+
+def test_a_caption_alone_is_not_a_transcription():
+    """The archive's unextracted figures left their captions behind, so a
+    caption line cannot stand in for the editor's record."""
+    body = "As Figure 2 shows.\n\nFigure 2. A chart.\n"
+    result = lint.check_figure_coverage({}, {"transcribed-figures": [1]}, body)
+    assert result.level == "warn"
+
+
+def test_works_cited_in_the_singular_is_a_references_section():
+    """A chapter with one source prints "Work Cited"; chapter 5 of Writing
+    Spaces 7 was reported as having no references at all."""
+    body = "Prose.\n\n# Work Cited\n\nMartinez, Aja Y. *Counterstory*. 2020.\n"
+    assert lint.check_works_cited_present({}, {}, body).level == "pass"
+
+
 def test_figure_coverage_is_registered():
     assert lint.check_figure_coverage in lint.DEFAULT_CHECKS
 
