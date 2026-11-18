@@ -3,7 +3,13 @@ FROM python:3.12-slim-bookworm
 
 # Pandoc 3+ is a hard requirement (see docs/help/11-developers.md) and Debian
 # bookworm only ships 2.17, so pull the release .deb directly.
-ARG PANDOC_VERSION=3.1.11
+#
+# 3.11 is the floor, not 3.1.11. The fig-alt and math-alt filters and every
+# PDF/UA claim are verified against 3.11, the first release whose Typst writer
+# emits an image's `alt:`. Under 3.1.11 (and 3.9) every figure reached Typst
+# with no alt text, Typst refused PDF/UA-1, and the galley shipped through the
+# unconstrained fallback. tests/test_toolchain.py holds the pin.
+ARG PANDOC_VERSION=3.11
 ARG PANDOC_ARCH=amd64
 
 # cloudflared carries the outbound-only tunnel to Cloudflare's edge. Pinned
