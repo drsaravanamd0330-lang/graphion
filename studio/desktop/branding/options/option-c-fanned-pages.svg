@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Journal Typesetting Studio">
+  <rect x="8" y="8" width="240" height="240" rx="52" fill="#f3f1ea"/>
+  <g transform="rotate(-14 128 150)"><rect x="72" y="56" width="104" height="140" rx="8" fill="#2f7d6d"/></g>
+  <g transform="rotate(-5 128 150)"><rect x="76" y="54" width="104" height="140" rx="8" fill="#3c5a8a"/></g>
+  <g transform="rotate(5 128 150)">
+    <rect x="80" y="52" width="104" height="140" rx="8" fill="#ffffff" stroke="#1d2430" stroke-width="5"/>
+    <rect x="94" y="68" width="76" height="16" rx="3" fill="#1d2430"/>
+    <g fill="#9aa3b0">
+      <rect x="94" y="96" width="34" height="5" rx="2.5"/><rect x="136" y="96" width="34" height="5" rx="2.5"/>
+      <rect x="94" y="110" width="34" height="5" rx="2.5"/><rect x="136" y="110" width="34" height="5" rx="2.5"/>
+      <rect x="94" y="124" width="34" height="5" rx="2.5"/><rect x="136" y="124" width="34" height="5" rx="2.5"/>
+      <rect x="94" y="138" width="34" height="5" rx="2.5"/><rect x="136" y="138" width="22" height="5" rx="2.5"/>
+      <rect x="94" y="152" width="34" height="5" rx="2.5"/>
+      <rect x="94" y="166" width="20" height="5" rx="2.5"/>
+    </g>
+    <circle cx="158" cy="164" r="13" fill="#d9822b"/>
+  </g>
+</svg>

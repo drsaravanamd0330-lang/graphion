@@ -1,0 +1,73 @@
+# Builds the Journal Typesetting Studio Windows program and installer, and runs
+# the Studio's tests on Windows. The installer is attached to the run as an
+# artifact; nothing is published or released from here.
+name: Studio desktop (Windows)
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "studio/**"
+      - ".github/workflows/studio-desktop-windows.yml"
+  pull_request:
+    paths:
+      - "studio/**"
+      - ".github/workflows/studio-desktop-windows.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Pandoc for the tests
+        run: choco install pandoc --no-progress -y
+
+      - name: Studio tests on Windows
+        shell: pwsh
+        run: |
+          $env:PATH = "C:\Program Files\Pandoc;$env:PATH"
+          python -m pip install -r studio\requirements.txt -r studio\desktop\requirements.txt
+          python -m pytest studio\tests -q
+
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup --no-progress -y }
+
+      - name: Build program and installer
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File studio\desktop\windows\build.ps1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: JournalTypesettingStudio-Windows-installer
+          path: dist/JournalTypesettingStudio-Setup-*.exe
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: smoke-log
+          path: build/smoke-home/data/desktop.log
+          if-no-files-found: ignore

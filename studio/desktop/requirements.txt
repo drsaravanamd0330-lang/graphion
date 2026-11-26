@@ -1,0 +1,5 @@
+# Desktop window for Journal Typesetting Studio. Install after studio/requirements.txt.
+# pywebview shows the Studio in a native window (Microsoft Edge WebView2 on
+# Windows, which Windows 10 and 11 already carry). Without it the launcher
+# opens the default browser instead, so it is optional.
+pywebview>=5.0

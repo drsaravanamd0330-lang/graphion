@@ -53,6 +53,21 @@ def create_app() -> Flask:
         session["editor"] = request.form.get("editor", "").strip()
         return redirect(request.referrer or url_for("index"))
 
+    # ---------------------------------------------------------------- brand
+
+    brand_dir = config.PACKAGE_DIR / "desktop" / "branding"
+    brand_files = {"logo.svg": "image/svg+xml", "icon.ico": "image/x-icon", "icon-256.png": "image/png"}
+
+    @app.get("/brand/<name>")
+    def brand(name):
+        if name not in brand_files or not (brand_dir / name).is_file():
+            abort(404)
+        return send_file(brand_dir / name, mimetype=brand_files[name], max_age=86400)
+
+    @app.get("/favicon.ico")
+    def favicon():
+        return brand("icon.ico")
+
     # ---------------------------------------------------------------- articles
 
     @app.get("/")
