@@ -73,6 +73,40 @@ Windows, macOS and Linux.
 macOS and Linux are the same steps with `python3`, `source .venv/bin/activate`
 and Pandoc from Homebrew or your package manager.
 
+## Open it as a desktop app
+
+The Studio can run as an ordinary Windows program with its own icon and
+window, so nobody has to open PowerShell to use it. There are two ways.
+
+**From this repository (simplest for one desk).** After step 1 above (Python
+installed), double-click `studio\desktop\windows\Install Desktop App.bat`.
+It creates the Python environment, installs the packages, offers to install
+Pandoc with winget if it is missing, and puts a **Journal Typesetting Studio**
+icon on the Desktop and in the Start menu. From then on, double-click the
+icon. Run it again after pulling new code; run `Remove Desktop Shortcuts.bat`
+to take the icons away (articles are not touched).
+
+**As an installer (for handing to other editors).** On any Windows machine
+with Python 3.11+ and, optionally, Inno Setup 6:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File studio\desktop\windows\build.ps1
+```
+
+This builds `dist\Journal Typesetting Studio\` (a self-contained program with
+Pandoc inside it) and `dist\JournalTypesettingStudio-Setup-<version>.exe`.
+The installer needs no administrator rights and no Python on the editor's
+machine. The same build runs on GitHub Actions (workflow "Studio desktop
+(Windows)") and attaches the installer to the run. An installed copy keeps
+its articles, journal profiles and criteria in `Documents\Journal Typesetting
+Studio`, copied from the bundled profiles on first run and never overwritten.
+
+Either way the window is the same web interface described below, shown in
+Microsoft Edge WebView2 (part of Windows 10 and 11). If WebView2 is missing
+the Studio opens in the default browser instead, with a small panel to quit.
+If Pandoc cannot be found the Studio opens on a setup page with the steps.
+Details: `studio/desktop/README.md`.
+
 ## Your first proof (about five minutes)
 
 From the `graphion` folder with the virtual environment active:

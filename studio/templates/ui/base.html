@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="{{ url_for('brand', name='logo.svg') }}" type="image/svg+xml">
+<link rel="alternate icon" href="{{ url_for('favicon') }}">
 <title>{% block title %}Journal Typesetting Studio{% endblock %}</title>
 <style>
 :root { --ink:#1d2430; --muted:#5b6573; --line:#d6dbe2; --bg:#f6f7f9; --card:#fff; --accent:#1f3b63;
@@ -11,6 +13,8 @@
 body { margin:0; font:15px/1.5 system-ui, "Segoe UI", Roboto, sans-serif; color:var(--ink); background:var(--bg); }
 header { background:var(--accent); color:#fff; padding:.6rem 1.2rem; display:flex; gap:1.5rem; align-items:center; flex-wrap:wrap; }
 header a { color:#fff; text-decoration:none; font-weight:600; }
+header .brand { display:flex; align-items:center; gap:.55rem; font-size:1.05rem; }
+header .brand img { width:30px; height:30px; display:block; }
 header form { margin-left:auto; display:flex; gap:.4rem; align-items:center; }
 header input { padding:.25rem .4rem; border:0; border-radius:3px; }
 main { max-width:1180px; margin:1.2rem auto; padding:0 1rem; }
@@ -40,7 +44,7 @@ a { color:var(--accent); }
 </head>
 <body>
 <header>
-  <a href="{{ url_for('index') }}">Journal Typesetting Studio</a>
+  <a class="brand" href="{{ url_for('index') }}"><img src="{{ url_for('brand', name='logo.svg') }}" alt="">Journal Typesetting Studio</a>
   <a href="{{ url_for('index') }}">Articles</a>
   <a href="{{ url_for('journals') }}">Journals and evidence</a>
   <form method="post" action="{{ url_for('set_editor') }}">

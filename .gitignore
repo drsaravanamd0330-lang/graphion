@@ -70,3 +70,9 @@ data/results/
 
 # Journal Typesetting Studio working data (imports, proofs, database)
 studio_data/
+
+# Studio desktop app build output (studio/desktop/windows/build.ps1)
+.venv-build/
+/dist/
+/build/
+studio/desktop/vendor/
