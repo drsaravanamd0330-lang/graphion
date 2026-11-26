@@ -7,6 +7,8 @@ Word manuscript plus editor-approved metadata and produces:
 - a typeset A4 PDF (full-width masthead on page 1, two-column body or a
   one-column option, distinct layouts for original research, review, case
   report and editorial, declarations before references),
+- the same typeset article as a Word file (`article.docx`) for authors and
+  editors who correct proofs in Word,
 - an article landing page and a full-text HTML page,
 - `record.json`, the structured record every other output is built from,
 - optional JATS 1.3 XML and Crossref 5.3.1 deposit XML, each validated against
@@ -93,7 +95,8 @@ python -m studio render art-20261126-1a2b3c
 ```
 
 The files are in `studio_data\articles\<article id>\revisions\r001\`:
-`article.pdf`, `index.html`, `fulltext.html`, `record.json`, `report.html`.
+`article.pdf`, `article.docx`, `index.html`, `fulltext.html`, `record.json`,
+`report.html`.
 
 Or do the same in the browser:
 
@@ -143,6 +146,20 @@ Every command calls the same code as the web interface.
 | `python -m studio live ART` | check a registered DOI and the live pages (network) |
 | `python -m studio evidence JOURNAL doaj\|scopus\|wos` | indexing evidence for a journal |
 | `python -m studio serve [--port 5070]` | the web interface on 127.0.0.1 |
+
+## Missing values on a proof
+
+A journal can print `[Insert ...]` where a value is missing (authors,
+affiliations, correspondence, dates, volume, issue, pages, DOI, licence) by
+setting `layout.house.missing: insert` in its profile. The placeholders are
+for the page only: `record.json`, the XML and the page metadata never carry
+them, and the proof stays blocked while one is showing. An unverified date is
+printed as `[Insert date]`, never as fact.
+
+A reference whose volume year is later than its online date can carry the
+online date, set by an editor in the editor layer with the source checked:
+`references_patch: {ref12: {epub: "2026-07-01", epub_source: "PubMed PMID ..."}}`.
+It prints in the NLM form, "Epub 2026 Jul 1."
 
 ## Journals and publishers
 

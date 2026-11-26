@@ -386,17 +386,19 @@ class Builder:
         if r.get("references"):
             rl = etree.SubElement(back, "ref-list")
             etree.SubElement(rl, "title").text = "References"
+            from .typst_render import epub_date
             for ref in r["references"]:
                 re_ = etree.SubElement(rl, "ref", {"id": ref["id"]})
+                typed = ref["raw"] + (f" Epub {epub_date(ref['epub'])}." if ref.get("epub") else "")
                 etree.SubElement(re_, "label").text = ref["label"]
                 csl = ref.get("csl")
                 if csl and csl.get("type") == "article-journal":
                     alt = etree.SubElement(re_, "citation-alternatives")
                     alt.append(self.element_citation(csl))
-                    etree.SubElement(alt, "mixed-citation", {"publication-type": "journal"}).text = ref["raw"]
+                    etree.SubElement(alt, "mixed-citation", {"publication-type": "journal"}).text = typed
                 else:
                     mc = etree.SubElement(re_, "mixed-citation")
-                    mc.text = ref["raw"]
+                    mc.text = typed
         if not len(back):
             art.remove(back)
         return art

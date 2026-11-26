@@ -17,7 +17,7 @@ from .pipeline import WorkflowError
 from .profiles import ProfileError, create_journal, list_profiles, load_profile, save_profile_yaml
 
 REVISION_FILES = {"logo.svg", "article.pdf", "index.html", "fulltext.html", "record.json", "report.json", "report.html",
-                  "inputs.json", "approval.json", "data.json"}
+                  "inputs.json", "approval.json", "data.json", "article.docx"}
 
 
 def create_app() -> Flask:

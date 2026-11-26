@@ -153,7 +153,7 @@ def readiness(findings: list[Finding | dict], acks: dict) -> dict:
 
 # ------------------------------------------------------------------ inputs and keys
 
-RENDER_MODULES = ("typst_render.py", "html_render.py", "references.py")
+RENDER_MODULES = ("typst_render.py", "html_render.py", "references.py", "docx_export.py")
 
 
 def template_hash(profile: Profile) -> str:
@@ -234,6 +234,12 @@ def render(article_id: str) -> dict:
     pages = html_render.render_pages(record, profile, facts["references"], watermark)
     for name, html in pages.items():
         (rdir / name).write_text(html, encoding="utf-8")
+    docx_note = None
+    try:
+        from .docx_export import build_docx
+        build_docx(view, rdir / "fulltext.html", profile.logo_path(), rdir / "article.docx", ts)
+    except Exception as exc:   # the Word copy is a convenience; never lose the proof over it
+        docx_note = f"The Word version could not be built: {type(exc).__name__}: {exc}"
 
     out_findings = checks.pdf_checks(rdir / "article.pdf", record, msgs)
     page_paths = {name: rdir / name for name in pages}
@@ -248,6 +254,8 @@ def render(article_id: str) -> dict:
         out_findings.append(Finding("pdf-font-family", checks.WARNING, "Font family not found",
                                     f"Typst could not find {', '.join(missing_fonts)} and used a fallback. Add the font files to "
                                     "the profile's fonts/ folder or change the profile.", "profile.branding.fonts", "pdf"))
+    if docx_note:
+        out_findings.append(Finding("docx-export", checks.WARNING, "Word version", docx_note, "outputs", "docx"))
     for e in facts["math_failed"]:
         out_findings.append(Finding("math-convert", BLOCKED, "Equation conversion", f"Pandoc could not convert: {e}", "equations", "pdf"))
     for note in facts["notes"]:
@@ -406,7 +414,7 @@ def export(article_id: str, number: int | None = None, jats: bool = False, cross
 
 
 def _package_members(rdir: Path, xml_dir: Path | None) -> list[tuple[str, Path]]:
-    names = ["article.pdf", "index.html", "fulltext.html", "record.json", "report.json", "report.html", "inputs.json",
+    names = ["article.pdf", "article.docx", "index.html", "fulltext.html", "record.json", "report.json", "report.html", "inputs.json",
              "approval.json"]
     members = [(n, rdir / n) for n in names if (rdir / n).is_file()]
     media = rdir / "media"

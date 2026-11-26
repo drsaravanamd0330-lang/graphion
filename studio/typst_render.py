@@ -115,6 +115,12 @@ def _all_math(record: dict) -> list[str]:
     return out
 
 
+def epub_date(iso: str) -> str:
+    """2026-07-01 -> 2026 Jul 1 (NLM)."""
+    d = dt.date.fromisoformat(str(iso))
+    return f"{d.year} {d.strftime('%b')} {d.day}"
+
+
 def format_references(record: dict, profile: Profile) -> list[dict]:
     """Each reference with the inlines to print and how they were produced."""
     items = []
@@ -137,6 +143,11 @@ def format_references(record: dict, profile: Profile) -> list[dict]:
             entry["c"] = [text(r["raw"])]
             if r.get("csl"):
                 entry["note"] = "CSL formatting unavailable (Pandoc citeproc did not run); typed text kept"
+        if r.get("epub"):
+            # The online date of an item whose volume carries a later year,
+            # in the NLM form ("Epub 2026 Jul 1"). Set by an editor, with the
+            # source they checked it against, never inferred.
+            entry["c"] = list(entry["c"]) + [text(f" Epub {epub_date(r['epub'])}.")]
         out.append(entry)
     return out
 

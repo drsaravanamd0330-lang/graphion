@@ -145,6 +145,22 @@ def test_proof_outputs_exist_and_preserve_content(env, approved):
     html = (rdir / "fulltext.html").read_text(encoding="utf-8")
     assert record["title"]["en"] and "Menon" in html
     assert store.read_json(rdir / "inputs.json")["profile_version"]
+    # The Word copy carries the same article: authors in order, every
+    # reference, and the body text word for word.
+    import re
+    from collections import Counter
+    from docx import Document
+    from studio.model import blocks_plain
+    doc = Document(str(rdir / "article.docx"))
+    dtext = " ".join(p.text for p in doc.paragraphs) + " " + " ".join(
+        c.text for t in doc.tables for row in t.rows for c in row.cells)
+    dpos = [dtext.find(n) for n in ("Menon", "Osei", "Núñez-Ibáñez")]
+    assert all(p >= 0 for p in dpos) and dpos == sorted(dpos)
+    words = lambda s: Counter(re.findall(r"\w+", s))
+    body, got = words(blocks_plain(record["body"], record)), words(dtext)
+    math = words(" ".join(e["tex"] for e in record["equations"]))   # Word holds equations as OMML, not text
+    assert not {w: n for w, n in body.items() if got[w] < n and w not in math}
+    assert "m:oMath" in __import__("zipfile").ZipFile(rdir / "article.docx").read("word/document.xml").decode()
 
 
 def test_approval_records_versions_and_rerender_reuses(env, approved):

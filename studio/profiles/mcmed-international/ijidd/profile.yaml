@@ -8,8 +8,8 @@ journal:
   abbreviation: "IJIDD"                                          # verify: official abbreviation
   homepage: "https://www.ijidd.com"                              # from the template masthead
   language: en
-  issn_print:  {value: "2249-7617", verified: false}   # from the template; check digit valid; verify at portal.issn.org
-  issn_online: {value: "2249-7609", verified: false}   # from the template; check digit valid; verify at portal.issn.org
+  issn_print:  {value: "2249-7617", verified: true}    # confirmed by the editor (RAVANA), 2026-11-26
+  issn_online: {value: "2249-7609", verified: true}    # confirmed by the editor (RAVANA), 2026-11-26
   editor_in_chief: ""
 branding:
   logo: logo.jpeg                                      # from the template
