@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="card">
+  <h1>Articles</h1>
+  {% if articles %}
+  <table>
+    <tr><th>Article</th><th>Journal</th><th>Type</th><th>Latest revision</th><th>Approved</th></tr>
+    {% for a in articles %}
+    <tr>
+      <td><a href="{{ url_for('article', aid=a.id) }}">{{ a.title or a.id }}</a><div class="field">{{ a.id }}</div></td>
+      <td>{{ a.journal_id }}</td>
+      <td>{{ ARTICLE_TYPES.get(a.article_type, a.article_type) }}</td>
+      <td>{% if a.latest_rev %}r{{ a.latest_rev }} <span class="badge st-{{ a.latest_status }}">{{ a.latest_status }}</span>{% else %}<span class="muted">none yet</span>{% endif %}</td>
+      <td>{% if a.approved_rev %}r{{ a.approved_rev }}{% else %}<span class="muted">no</span>{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}<p class="muted">No articles yet. Import an accepted manuscript below.</p>{% endif %}
+</div>
+<div class="card">
+  <h2>Import an accepted manuscript</h2>
+  <form method="post" action="{{ url_for('import_article') }}" enctype="multipart/form-data">
+    <div class="grid">
+      <div><label for="docx">Manuscript (.docx)</label><input id="docx" type="file" name="docx" accept=".docx" required></div>
+      <div><label for="metadata">Editor-approved metadata (YAML or JSON, optional)</label><input id="metadata" type="file" name="metadata" accept=".yaml,.yml,.json"></div>
+      <div><label for="journal">Journal</label>
+        <select id="journal" name="journal">{% for p in profiles %}<option value="{{ p.id }}">{{ p.title }} ({{ p.publisher_name }})</option>{% endfor %}</select></div>
+      <div><label for="article_type">Article type</label>
+        <select id="article_type" name="article_type">{% for k, v in ARTICLE_TYPES.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></div>
+    </div>
+    <p><button>Import</button></p>
+    <p class="small muted">Nothing is invented on import. Values the manuscript does not state stay empty and are reported, and the approval gate stays closed until they are supplied or acknowledged.</p>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="{{ lang }}">
+<head>
+{% include "_head.html.j2" %}
+<title>{{ title_text }} | {{ journal.title }}</title>
+</head>
+<body>
+<a class="skip" href="#main">Skip to the article</a>
+{% include "_front.html.j2" %}
+<section aria-labelledby="cite-h">
+<h2 id="cite-h">How to cite</h2>
+<p>{{ how_to_cite }}</p>
+</section>
+{% if supplementary %}
+<section aria-labelledby="supp-h"><h2 id="supp-h">Supplementary material</h2>
+<ul>{% for s in supplementary %}<li><a href="{{ s.url }}">{{ s.label }}</a>{% if s.description %}: {{ s.description }}{% endif %}</li>{% endfor %}</ul></section>
+{% endif %}
+{% if license %}<footer class="license"><p>{{ license.statement }}{% if license.url %} <a rel="license" href="{{ license.url }}">{{ license.url }}</a>{% endif %}</p></footer>{% endif %}
+</article>
+</main>
+</body>
+</html>

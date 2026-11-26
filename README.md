@@ -18,6 +18,10 @@ clean Markdown with YAML front matter
 HTML + tagged PDF + EPUB + JATS + CrossRef deposit
 ```
 
+> **Journal Typesetting Studio** (DOCX plus approved metadata to typeset PDF,
+> HTML, JSON, JATS and Crossref XML, with validation and revisions) lives in
+> [`studio/`](studio/README.md) and is installed and run separately.
+
 ---
 
 ## Why this exists

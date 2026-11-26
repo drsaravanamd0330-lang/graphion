@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% block title %}{{ plain(record.title.en) or row.id }}{% endblock %}
+{% block body %}
+<div class="card">
+  <div class="muted small">{{ profile.title }} · {{ ARTICLE_TYPES.get(row.article_type, row.article_type) }} · <span class="field">{{ row.id }}</span></div>
+  <h1>{{ plain(record.title.en) or "Untitled" }}</h1>
+  <p class="{{ 'ready' if state.ready else 'notready' }}">{{ state.label }}</p>
+  <form method="post" action="{{ url_for('render', aid=row.id) }}" style="display:inline"><button>Render revision</button></form>
+  <span class="small muted">A draft renders even with blocked findings; it is watermarked and cannot be approved.</span>
+</div>
+
+<div class="card" id="revisions">
+  <h2>Revisions</h2>
+  {% if revisions %}
+  <table>
+    <tr><th>Revision</th><th>Status</th><th>Created</th><th>Findings</th><th>Approved</th><th>Packages</th></tr>
+    {% for r in revisions %}
+    <tr>
+      <td><a href="{{ url_for('revision', aid=row.id, n=r.number) }}">r{{ r.number }}</a><div class="field">{{ r.input_key }}</div></td>
+      <td><span class="badge st-{{ r.status }}">{{ r.status }}</span></td>
+      <td class="small">{{ r.created_at }}</td>
+      <td class="small">{% for k, v in r.summary.items() if v %}{{ v }} {{ k }}{% if not loop.last %}, {% endif %}{% endfor %}</td>
+      <td class="small">{% if r.approved_by %}{{ r.approved_by }}<br>{{ r.approved_at }}{% endif %}</td>
+      <td class="small">{% for p in r.packages %}<a href="{{ url_for('revision_file', aid=row.id, n=r.number, name=p) }}">{{ p }}</a><br>{% endfor %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}<p class="muted">No revision rendered yet.</p>{% endif %}
+</div>
+
+<div class="card" id="findings">
+  <h2>Findings</h2>
+  <table>
+    <tr><th>Status</th><th>Check</th><th>Explanation</th><th>Action</th></tr>
+    {% for f in findings if f.status != "pass" %}
+    {% set acked = acks.get(f.fingerprint) %}
+    <tr>
+      <td>{% if f.status == "manual" and acked %}<span class="badge s-acked">Acknowledged</span>{% else %}<span class="badge s-{{ f.status }}">{{ f.status_label }}</span>{% endif %}</td>
+      <td>{{ f.title }}{% if f.field %}<div class="field"><a href="#metadata">{{ f.field }}</a></div>{% endif %}</td>
+      <td class="small">{{ f.explanation }}</td>
+      <td class="small">
+        {% if f.status == "manual" and not acked %}
+        <form method="post" action="{{ url_for('ack', aid=row.id) }}">
+          <input type="hidden" name="fingerprint" value="{{ f.fingerprint }}"><input type="hidden" name="check" value="{{ f.check }}">
+          <input type="text" name="note" placeholder="what you checked" aria-label="Note for {{ f.title }}">
+          <button class="secondary">Acknowledge</button>
+        </form>
+        {% elif acked %}{{ acked.acknowledged_by }}: {{ acked.note or "" }}{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  <details><summary class="small">Passing checks ({{ findings|selectattr("status", "equalto", "pass")|list|length }})</summary>
+    <ul class="small">{% for f in findings if f.status == "pass" %}<li>{{ f.title }}: {{ f.explanation }}</li>{% endfor %}</ul>
+  </details>
+</div>
+
+<div class="card" id="metadata">
+  <h2>Metadata</h2>
+  <p class="small muted">Edits go into the editor layer; the extracted manuscript text is never rewritten. Any change makes the next render a new revision that needs its own approval.</p>
+  <form method="post" action="{{ url_for('metadata', aid=row.id) }}">
+    <h3>Publication</h3>
+    <div class="grid">
+      {% set pub = record.publication %}
+      {% for k, label in [("volume","Volume"),("issue","Issue"),("article_number","Article number"),("first_page","First page"),("last_page","Last page")] %}
+      <div><label for="{{ k }}">{{ label }}</label><input type="text" id="{{ k }}" name="{{ k }}" value="{{ pub[k] or '' }}"></div>
+      {% endfor %}
+      <div><label for="doi">DOI (assigned by the journal)</label><input type="text" id="doi" name="doi" value="{{ pub.doi or '' }}" placeholder="10.xxxx/..."></div>
+      <div><label><input type="checkbox" name="doi_registered" {{ "checked" if pub.doi_registered }}> DOI is registered and should resolve</label></div>
+      <div><label for="short_title">Short title (running header)</label><input type="text" id="short_title" name="short_title" value="{{ record.short_title or '' }}"></div>
+    </div>
+    <h3>Dates (entering a date confirms it)</h3>
+    <div class="grid">
+      {% for k in ["received","revised","accepted","published"] %}
+      {% set d = record.dates.get(k) or {} %}
+      <div><label for="date_{{ k }}">{{ k|capitalize }}{% if d.value and not d.verified %} (from manuscript, unconfirmed){% endif %}</label>
+        <input type="date" id="date_{{ k }}" name="date_{{ k }}" value="{{ d.value or '' }}"></div>
+      {% endfor %}
+    </div>
+    <h3>Authors</h3>
+    <table>
+      <tr><th>#</th><th>Given</th><th>Family</th><th>Email</th><th>ORCID</th><th>Corresponding</th><th>Affiliations</th></tr>
+      {% for a in record.authors %}
+      <tr>
+        <td>{{ loop.index }}</td>
+        <td><input type="text" name="given_{{ a.id }}" value="{{ a.given or '' }}" aria-label="Given names of author {{ loop.index }}"></td>
+        <td><input type="text" name="family_{{ a.id }}" value="{{ a.family or '' }}" aria-label="Family name of author {{ loop.index }}"></td>
+        <td><input type="text" name="email_{{ a.id }}" value="{{ a.email or '' }}" aria-label="Email of author {{ loop.index }}"></td>
+        <td class="small">{{ a.orcid or "none" }}{% if a.orcid %}<label><input type="checkbox" name="orcid_verified_{{ a.id }}" {{ "checked" if a.orcid_verified }}> verified</label>{% endif %}</td>
+        <td><input type="checkbox" name="corresponding_{{ a.id }}" {{ "checked" if a.corresponding }} aria-label="Author {{ loop.index }} is corresponding"></td>
+        <td class="small">{{ a.affiliations|join(", ") }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+    <h3>Affiliations</h3>
+    <ul class="small">{% for af in record.affiliations %}<li><b>{{ af.id }}</b> {{ af.raw }}{% if not af.country %} <span class="badge s-blocked">no country</span>{% endif %}</li>{% endfor %}</ul>
+    <p><button>Save metadata</button></p>
+  </form>
+  <details>
+    <summary>Edit the editor layer as JSON (affiliation, reference, licence exception and other overrides)</summary>
+    <form method="post" action="{{ url_for('editor_json', aid=row.id) }}">
+      <textarea class="code" name="editor_json" aria-label="Editor metadata JSON">{{ editor_json }}</textarea>
+      <p><button>Replace editor metadata</button></p>
+    </form>
+  </details>
+  <details>
+    <summary>Replace the manuscript (keeps editor metadata)</summary>
+    <form method="post" action="{{ url_for('reimport', aid=row.id) }}" enctype="multipart/form-data">
+      <input type="file" name="docx" accept=".docx" required aria-label="Replacement manuscript"> <button>Replace</button>
+    </form>
+  </details>
+</div>
+
+<div class="card" id="structure">
+  <h2>Structure</h2>
+  <div class="grid small">
+    <div><b>{{ record.body|selectattr("t","equalto","heading")|list|length }}</b> headings</div>
+    <div><b>{{ record.figures|length }}</b> figures</div>
+    <div><b>{{ record.tables|length }}</b> tables</div>
+    <div><b>{{ record.equations|length }}</b> equations</div>
+    <div><b>{{ record.references|length }}</b> references</div>
+    <div><b>{{ record.footnotes|length }}</b> footnotes</div>
+  </div>
+  <h3>Outline</h3>
+  <ul class="small">{% for b in record.body if b.t == "heading" %}<li style="margin-left:{{ (b.level - 1) * 1.2 }}rem">{{ plain(b.c) }}</li>{% endfor %}</ul>
+  <h3>Figures and tables</h3>
+  <ul class="small">
+    {% for f in record.figures %}<li>{{ f.label }}: {{ plain(f.caption) }} <span class="muted">(alt text: {{ f.alt or "missing" }})</span></li>{% endfor %}
+    {% for t in record.tables %}<li>{{ t.label }}: {{ plain(t.caption) }} <span class="muted">({{ t.cols }} columns, {{ t.rows|length }} rows)</span></li>{% endfor %}
+  </ul>
+  <h3>References</h3>
+  <table class="small">
+    <tr><th>#</th><th>Parse</th><th>Source text (kept as typed)</th></tr>
+    {% for r in record.references %}<tr><td>{{ r.label }}</td><td>{{ r.parse_status }}{% if r.parse_reason %}<div class="muted">{{ r.parse_reason }}</div>{% endif %}</td><td>{{ r.raw }}</td></tr>{% endfor %}
+  </table>
+</div>
+{% endblock %}

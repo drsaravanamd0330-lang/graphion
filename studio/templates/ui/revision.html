@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}r{{ rev.number }} · {{ row.title or row.id }}{% endblock %}
+{% block body %}
+{% set f = url_for('revision_file', aid=row.id, n=rev.number, name='') %}
+<div class="card">
+  <div class="small"><a href="{{ url_for('article', aid=row.id) }}">{{ row.title or row.id }}</a></div>
+  <h1>Revision {{ rev.number }} <span class="badge st-{{ rev.status }}">{{ rev.status }}</span></h1>
+  <p class="small muted">Created {{ rev.created_at }} · input key <span class="field">{{ rev.input_key }}</span>
+  {% if rev.approved_by %} · approved by {{ rev.approved_by }} on {{ rev.approved_at }}{% endif %}</p>
+  {% if rev.status == "diagnostic" %}<p class="notready">Diagnostic draft: the record had blocked findings when this was rendered, so every page is watermarked and it cannot be approved. Fix the findings and render again.</p>{% endif %}
+  {% if rev.status == "blocked" %}<p class="notready">The rendered outputs failed checks (see below), so this revision cannot be approved.</p>{% endif %}
+  <p>
+    <a href="{{ f }}article.pdf">PDF</a> ·
+    <a href="{{ f }}article.docx">Word</a> ·
+    <a href="{{ f }}index.html">Landing page</a> ·
+    <a href="{{ f }}fulltext.html">Full-text HTML</a> ·
+    <a href="{{ f }}report.html">Production report</a> ·
+    <a href="{{ f }}record.json">record.json</a> ·
+    <a href="{{ f }}inputs.json">inputs.json</a>
+  </p>
+</div>
+
+<div class="card">
+  <h2>Approval</h2>
+  {% if rev.status == "approved" %}
+    <p class="ready">Approved. This revision's files are fixed; any edit renders a new revision.</p>
+  {% elif rev.status == "proof" %}
+    <p class="{{ 'ready' if current.ready else 'notready' }}">{{ current.label }}</p>
+    <form method="post" action="{{ url_for('approve', aid=row.id, n=rev.number) }}">
+      <button {{ "disabled" if not current.ready }}>Approve revision {{ rev.number }}</button>
+      <span class="small muted">Approval is refused if the manuscript, metadata, profile or templates changed since this revision.</span>
+    </form>
+  {% else %}<p class="muted">Only a proof revision can be approved.</p>{% endif %}
+</div>
+
+<div class="card" id="export">
+  <h2>Export package</h2>
+  <form method="post" action="{{ url_for('export', aid=row.id, n=rev.number) }}">
+    <label><input type="checkbox" name="jats"> Include JATS XML (validated against JATS 1.3)</label>
+    <label><input type="checkbox" name="crossref"> Include Crossref deposit XML (validated against schema 5.3.1)</label>
+    <p><button>Build ZIP</button> <span class="small muted">{{ "Approved package." if rev.status == "approved" else "Proof package, marked as not approved inside its manifest." }} Exporting again returns the same file and never overwrites one.</span></p>
+  </form>
+  {% if packages %}<ul>{% for p in packages %}<li><a href="{{ f }}{{ p }}">{{ p }}</a></li>{% endfor %}</ul>{% endif %}
+  {% for variant, results in xml.items() %}
+    <h3>{{ variant }}</h3>
+    <table class="small">
+    {% for name, v in results.items() %}
+      <tr><td>{{ name }}</td>
+        <td>{% if v.valid %}<span class="badge s-pass">Valid</span>{% elif v.note == "deposit not generated" %}<span class="badge s-blocked">Not generated</span>{% else %}<span class="badge s-blocked">Not valid</span>{% endif %}</td>
+        <td>{{ v.schema }}{% if v.note %}<div class="muted">{{ v.note }}</div>{% endif %}
+          {% if v.errors %}<ul>{% for e in v.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+          {% if v.mapping_notes %}<ul class="muted">{% for e in v.mapping_notes %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}</td></tr>
+    {% endfor %}
+    </table>
+  {% endfor %}
+</div>
+
+<div class="card">
+  <h2>Findings for this revision</h2>
+  <p class="small">{% for k, v in report.summary.items() %}{{ v }} {{ k }}{% if not loop.last %}, {% endif %}{% endfor %}</p>
+  <table>
+    {% for x in report.findings if x.status != "pass" %}
+    <tr><td><span class="badge s-{{ x.status }}">{{ x.status_label }}</span></td><td>{{ x.title }}<div class="field">{{ x.output }} {{ x.field or "" }}</div></td><td class="small">{{ x.explanation }}</td></tr>
+    {% endfor %}
+  </table>
+  {% if report.compile_messages %}
+  <details><summary class="small">Typesetting messages ({{ report.compile_messages|length }})</summary>
+    <ul class="small">{% for m in report.compile_messages %}<li>{{ m }}</li>{% endfor %}</ul></details>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>Pages ({{ pages }})</h2>
+  <div class="pages">
+  {% for p in range(1, pages + 1) %}<img src="{{ url_for('page_image', aid=row.id, n=rev.number, p=p) }}" alt="Page {{ p }} of the PDF proof" loading="lazy">{% endfor %}
+  </div>
+</div>
+{% endblock %}

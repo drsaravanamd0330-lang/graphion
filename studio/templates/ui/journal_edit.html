@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="card">
+  <div class="small"><a href="{{ url_for('journals') }}">Journals</a></div>
+  <h1>{{ profile.title }}</h1>
+  <p class="small muted">{{ profile.id }} · profile version {{ profile.version() }}. The profile is versioned by the hash of its files; every revision records the version it was rendered with.</p>
+  <form method="post">
+    <textarea class="code" name="text" aria-label="Profile YAML">{{ text }}</textarea>
+    <p><button>Save profile</button> <span class="small muted">Saved only if it parses and passes validation (ISSN checksums, colours, licence fields).</span></p>
+  </form>
+</div>
+{% endblock %}

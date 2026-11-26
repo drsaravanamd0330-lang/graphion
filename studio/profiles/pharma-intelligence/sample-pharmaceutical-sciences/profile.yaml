@@ -1,0 +1,81 @@
+# SAMPLE JOURNAL PROFILE. A configuration example, not a registered title.
+# Replace every value marked "verify" before producing anything for publication.
+profile_version: 1
+journal:
+  title: "Sample Reports in Pharmaceutical Sciences"   # verify
+  abbreviation: "Sample Rep Pharm Sci"
+  homepage: "https://pi.example.org/srps"              # verify
+  language: en
+  issn_print:  {value: "", verified: false}
+  issn_online: {value: "", verified: false}
+  editor_in_chief: ""
+branding:
+  logo: logo.svg
+  colors: {primary: "#0f5e5a", accent: "#7a3e8f", rule: "#8fb3b0", muted: "#4f5d5c"}
+  fonts: {body: "New Computer Modern", heading: "DejaVu Sans", sans: "DejaVu Sans", size: 9.5}
+layout:
+  page: a4
+  margins: {top: 22mm, bottom: 22mm, inside: 20mm, outside: 16mm}
+  columns: 2
+  column_gap: 5mm
+  running_header: "{journal_abbreviation} · {year} · Vol {volume} · {locator}"
+  running_header_even: "{short_title}"
+  footer: "{journal_title} · {doi_url}"
+  table_font_size: 7.5
+article_types:
+  original-research:
+    label: Research Paper
+    template: research
+    abstract: {required: true, structured: true, sections: [Background, Methods, Results, Conclusions], max_words: 250}
+    keywords: {min: 4, max: 6}
+    required_declarations: [funding, conflicts, contributions, data_availability, ethics]
+  review:
+    label: Review
+    template: review
+    abstract: {required: true, structured: false, max_words: 250}
+    keywords: {min: 4, max: 6}
+    required_declarations: [funding, conflicts]
+  case-report:
+    label: Case Report
+    template: case-report
+    abstract: {required: true, structured: false, max_words: 200}
+    keywords: {min: 3, max: 6}
+    required_declarations: [conflicts, consent]
+  editorial:
+    label: Editorial
+    template: editorial
+    columns: 1
+    abstract: {required: false}
+    keywords: {min: 0, max: 6}
+    required_declarations: [conflicts]
+declarations_order: [contributions, funding, conflicts, ethics, consent, trial_registration, data_availability, acknowledgements]
+references:
+  csl: ama.csl
+  in_text: superscript
+numbering:
+  model: pages
+  locator_format: "{first_page}–{last_page}"
+license:
+  default:
+    type: "CC BY 4.0"
+    url: "https://creativecommons.org/licenses/by/4.0/"
+    copyright_holder: "The Author(s)"
+    statement: >-
+      Copyright © {year} {copyright_holder}. This article is published by {publisher}
+      under the Creative Commons Attribution 4.0 International License (CC BY 4.0).
+  verified: false
+policies:
+  open_access: true
+schedule:
+  frequency: "quarterly"
+urls:
+  landing_live: "https://pi.example.org/srps/{volume}/{issue}/{first_page}"
+  pdf_live: "https://pi.example.org/srps/{volume}/{issue}/{first_page}.pdf"
+  fulltext_live: "https://pi.example.org/srps/{volume}/{issue}/{first_page}/full"
+crossref:
+  doi_prefix: ""
+  depositor_name: ""
+  depositor_email: ""
+  registrant: "Pharma Intelligence"
+jats:
+  publisher_loc: ""

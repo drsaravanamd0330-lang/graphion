@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block body %}
+{% set c = v.criteria %}
+<div class="card">
+  <div class="small"><a href="{{ url_for('journals') }}">Journals</a> ·
+    {% for i in indexes %}<a href="{{ url_for('journal_evidence', pid=profile.id, index=i) }}">{{ i|upper }}</a>{% if not loop.last %} · {% endif %}{% endfor %}</div>
+  <h1>{{ c.name }}: {{ profile.title }}</h1>
+  <table class="small">
+    <tr><th>Official source</th><td>{% for s in c.official_sources %}<a href="{{ s.url }}" rel="noopener">{{ s.label }}</a><br>{% endfor %}</td></tr>
+    <tr><th>Criteria version</th><td>{{ c.version }} (<a href="{{ url_for('criteria_edit', index=v.index) }}">edit criteria</a>)</td></tr>
+    <tr><th>Last checked against source</th><td>{{ c.last_checked or "never" }}</td></tr>
+    <tr><th>Verification</th><td><span class="badge {{ 's-pass' if c.verification == 'verified' else 's-warning' }}">{{ c.verification }}</span> {{ c.verification_note }}</td></tr>
+  </table>
+  <p class="small">{% for k, n in v.counts.items() %}{{ n }} {{ k }}{% if not loop.last %} · {% endif %}{% endfor %}</p>
+  <p class="small muted">Statuses are recorded by an editor with the page that evidences them. Studio's observations from the journal profile are hints and never mark a criterion verified.</p>
+</div>
+{% for r in v.rows %}
+<div class="card" id="c-{{ r.id }}">
+  <h3>{{ r.text }} <span class="badge {{ {'verified':'s-pass','not-met':'s-blocked','not-applicable':'s-na','needs review':'s-manual'}.get(r.status, 's-warning') }}">{{ r.status }}</span></h3>
+  <div class="field">{{ r.id }}</div>
+  {% if r.evidence_hint %}<p class="small muted">Evidence: {{ r.evidence_hint }}</p>{% endif %}
+  {% if r.observation %}<p class="small">Observed in profile: {{ r.observation }}</p>{% endif %}
+  {% if r.stale %}<p class="small notready">Recorded against criteria version {{ r.record.criteria_version }}; the criteria changed since. Review and save again.</p>{% endif %}
+  <form method="post">
+    <input type="hidden" name="criterion" value="{{ r.id }}">
+    <div class="grid">
+      <div><label for="st-{{ r.id }}">Status</label><select id="st-{{ r.id }}" name="status">{% for s in statuses %}<option {{ "selected" if r.record and r.record.status == s }}>{{ s }}</option>{% endfor %}</select></div>
+      <div><label for="url-{{ r.id }}">Evidence URL</label><input type="url" id="url-{{ r.id }}" name="evidence_url" value="{{ r.record.evidence_url if r.record and r.record.evidence_url else '' }}"></div>
+      <div><label for="d-{{ r.id }}">Date checked</label><input type="date" id="d-{{ r.id }}" name="checked_on" value="{{ r.record.checked_on if r.record and r.record.checked_on else '' }}"></div>
+      <div><label for="n-{{ r.id }}">Note</label><input type="text" id="n-{{ r.id }}" name="note" value="{{ r.record.note if r.record and r.record.note else '' }}"></div>
+    </div>
+    <p><button class="secondary">Save</button>{% if r.record %} <span class="small muted">last saved by {{ r.record.verified_by }}</span>{% endif %}</p>
+  </form>
+</div>
+{% endfor %}
+{% endblock %}

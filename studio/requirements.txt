@@ -1,0 +1,11 @@
+# Journal Typesetting Studio. Lighter than the Graphion requirements: nothing
+# here needs a C toolchain on Windows. Pandoc is a separate install (see README).
+flask>=3.0
+pyyaml>=6.0
+lxml>=5.0
+typst>=0.15        # Typst compiler as a Python package; no separate install
+pypdf>=4.0
+pypdfium2>=4.30    # page images for the review screen
+pdfplumber>=0.11   # PDF overflow and clipping check
+requests>=2.32     # optional live checks only
+pytest>=8.0
