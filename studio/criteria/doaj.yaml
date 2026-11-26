@@ -1,0 +1,55 @@
+# Journal-level evidence checklist. This is a working summary, not the
+# official text. Confirm every item against the official source before
+# relying on it, then record the date you checked in "last_checked".
+index: doaj
+name: Directory of Open Access Journals (DOAJ)
+version: 1
+official_sources:
+  - label: DOAJ guide to applying
+    url: https://doaj.org/apply/guide/
+  - label: Principles of Transparency and Best Practice in Scholarly Publishing
+    url: https://doaj.org/apply/transparency/
+last_checked: null          # ISO date an editor last compared this list with the sources
+verification: unverified    # unverified | verified
+verification_note: >-
+  Written from general knowledge on 2026-11-26. The official pages could not be
+  opened from the build environment, so no item here has been checked against
+  them.
+criteria:
+  - id: oa-immediate
+    text: All research content is free to read immediately on publication, with no embargo.
+    evidence_hint: Journal website page stating the open access policy.
+    auto: open_access
+  - id: licence-stated
+    text: The journal states the licence its articles are published under, and the licence is shown on each article.
+    evidence_hint: Licence policy page; an article landing page showing the licence.
+    auto: licence
+  - id: issn
+    text: The journal has an ISSN registered with the ISSN International Centre, shown on the website.
+    evidence_hint: ISSN portal record for the journal.
+    auto: issn
+  - id: peer-review-described
+    text: The peer review process is described on the website, including the type of review.
+    evidence_hint: Peer review policy page.
+  - id: editorial-board
+    text: The editorial board is listed with full names and affiliations.
+    evidence_hint: Editorial board page.
+  - id: aims-scope
+    text: Aims and scope are stated on the website.
+    evidence_hint: Aims and scope page.
+  - id: apc-transparent
+    text: Any author charges are stated clearly, or the absence of charges is stated.
+    evidence_hint: Fees page.
+  - id: copyright-policy
+    text: Copyright terms are stated and agree with the licence.
+    evidence_hint: Copyright policy page.
+    auto: copyright
+  - id: publishing-history
+    text: The journal has published enough content and history to be assessed (check the current minimum on the official guide).
+    evidence_hint: Archive page with issue dates.
+  - id: contact-details
+    text: Contact details for the editorial office are on the website.
+    evidence_hint: Contact page.
+  - id: archiving
+    text: A long-term preservation arrangement is in place and named (for example a digital archiving service).
+    evidence_hint: Preservation policy page or archive membership record.

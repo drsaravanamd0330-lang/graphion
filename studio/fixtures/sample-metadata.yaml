@@ -1,0 +1,17 @@
+# SYNTHETIC SAMPLE METADATA for the synthetic fixture manuscript.
+# These values stand in for what an editor would approve. They are not the
+# details of any real article. DOI is left empty on purpose: Studio never
+# generates one, so Crossref export reports it as missing.
+publication:
+  year: 2026
+  volume: "3"
+  issue: "2"
+  article_number: "1024"     # used by journals that number articles
+  first_page: 101            # used by journals that paginate issues
+  last_page: 108
+dates:
+  received: "2026-03-02"
+  revised: "2026-05-14"
+  accepted: "2026-06-20"
+  published: "2026-07-01"
+short_title: "Pharmacist-led review and blood pressure"

@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="card">
+  <h1>Journals</h1>
+  <table>
+    <tr><th>Journal</th><th>Publisher</th><th>Profile</th><th>Indexing evidence</th></tr>
+    {% for p in profiles %}
+    <tr>
+      <td>{{ p.title }}<div class="field">{{ p.id }}</div></td>
+      <td>{{ p.publisher_name }}</td>
+      <td><a href="{{ url_for('journal_edit', pid=p.id) }}">Edit profile</a><div class="field">version {{ p.version() }}</div></td>
+      <td><a href="{{ url_for('journal_evidence', pid=p.id, index='doaj') }}">DOAJ</a> ·
+          <a href="{{ url_for('journal_evidence', pid=p.id, index='scopus') }}">Scopus</a> ·
+          <a href="{{ url_for('journal_evidence', pid=p.id, index='wos') }}">Web of Science</a></td>
+    </tr>
+    {% endfor %}
+  </table>
+  <p class="small">Criteria lists: <a href="{{ url_for('criteria_edit', index='doaj') }}">DOAJ</a> · <a href="{{ url_for('criteria_edit', index='scopus') }}">Scopus</a> · <a href="{{ url_for('criteria_edit', index='wos') }}">Web of Science</a></p>
+</div>
+<div class="card">
+  <h2>Add a journal</h2>
+  <form method="post" action="{{ url_for('journal_new') }}">
+    <div class="grid">
+      <div><label for="publisher">Publisher folder</label><input type="text" id="publisher" name="publisher" placeholder="mcmed-international" required></div>
+      <div><label for="slug">Journal folder</label><input type="text" id="slug" name="slug" placeholder="my-journal" required></div>
+      <div><label for="title">Journal title</label><input type="text" id="title" name="title" required></div>
+      <div><label for="clone_from">Start from</label><select id="clone_from" name="clone_from">{% for p in profiles %}<option value="{{ p.id }}">{{ p.title }}</option>{% endfor %}</select></div>
+    </div>
+    <p><button>Create</button> <span class="small muted">ISSNs are cleared on the copy; enter and verify the new journal's own.</span></p>
+  </form>
+</div>
+{% endblock %}

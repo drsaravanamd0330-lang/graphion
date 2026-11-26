@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="{{ lang }}">
+<head>
+{% include "_head.html.j2" %}
+<title>{{ title_text }} | {{ journal.title }}</title>
+</head>
+<body>
+<a class="skip" href="#body">Skip to the article text</a>
+{% include "_front.html.j2" %}
+<div id="body" class="body">
+{{ body }}
+</div>
+{% if declarations %}
+<section class="declarations" aria-labelledby="decl-h">
+<h2 id="decl-h">Declarations</h2>
+{% for d in declarations %}<h3>{{ d.heading }}</h3>{{ d.html }}{% endfor %}
+</section>
+{% endif %}
+{% if references %}
+<section aria-labelledby="refs-h" role="doc-bibliography">
+<h2 id="refs-h">References</h2>
+<ol class="references">{% for r in references %}<li id="{{ r.id }}" value="{{ r.label }}">{{ r.html }}</li>{% endfor %}</ol>
+</section>
+{% endif %}
+{% if footnotes %}
+<section aria-labelledby="fn-h" role="doc-endnotes"><h2 id="fn-h">Notes</h2>
+<ol>{% for f in footnotes %}<li id="{{ f.id }}">{{ f.html }} <a href="#{{ f.id }}-ref" role="doc-backlink" aria-label="Back to note {{ f.n }}">↩</a></li>{% endfor %}</ol></section>
+{% endif %}
+{% if license %}<footer class="license"><p>{{ license.statement }}{% if license.url %} <a rel="license" href="{{ license.url }}">{{ license.url }}</a>{% endif %}</p></footer>{% endif %}
+</article>
+</main>
+</body>
+</html>

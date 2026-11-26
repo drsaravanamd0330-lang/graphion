@@ -1,0 +1,85 @@
+# SAMPLE JOURNAL PROFILE. The journal below is a configuration example, not a
+# registered title. Replace every value marked "verify" with the journal's
+# registered details before producing anything for publication. Nothing in
+# Studio will invent an ISSN, DOI prefix or licence for you.
+profile_version: 1
+journal:
+  title: "Sample Journal of Clinical Research"      # verify: registered title
+  abbreviation: "Sample J Clin Res"
+  homepage: "https://journals.example.org/sjcr"     # verify
+  language: en
+  issn_print:  {value: "", verified: false}         # verify: enter only an ISSN issued by the ISSN network
+  issn_online: {value: "", verified: false}
+  editor_in_chief: ""
+branding:
+  logo: logo.svg
+  colors: {primary: "#1f3b63", accent: "#b5532a", rule: "#9aa7b8", muted: "#5b6573"}
+  fonts: {body: "Libertinus Serif", heading: "Libertinus Serif", sans: "DejaVu Sans", size: 10}
+layout:
+  page: a4
+  margins: {top: 20mm, bottom: 20mm, inside: 18mm, outside: 18mm}
+  columns: 2
+  column_gap: 6mm
+  running_header: "{journal_abbreviation} {year};{volume}({issue}):{locator}"
+  running_header_even: "{first_author_surname} et al."
+  footer: "{doi_url}"
+  table_font_size: 8
+article_types:
+  original-research:
+    label: Original Research
+    template: research
+    abstract: {required: true, structured: true, sections: [Background, Methods, Results, Conclusions], max_words: 300}
+    keywords: {min: 3, max: 8}
+    required_declarations: [funding, conflicts, contributions, data_availability, ethics]
+  review:
+    label: Review Article
+    template: review
+    abstract: {required: true, structured: false, max_words: 300}
+    keywords: {min: 3, max: 8}
+    required_declarations: [funding, conflicts, contributions]
+  case-report:
+    label: Case Report
+    template: case-report
+    abstract: {required: true, structured: false, max_words: 250}
+    keywords: {min: 3, max: 6}
+    required_declarations: [funding, conflicts, consent, ethics]
+  editorial:
+    label: Editorial
+    template: editorial
+    columns: 1
+    abstract: {required: false}
+    keywords: {min: 0, max: 6}
+    required_declarations: [conflicts]
+declarations_order: [funding, conflicts, contributions, data_availability, acknowledgements, ethics, consent, trial_registration]
+references:
+  csl: vancouver-nlm.csl
+  in_text: bracket          # bracket -> [1]; superscript -> ¹
+numbering:
+  model: article-number     # article-number | pages
+  locator_format: "e{article_number}"
+license:
+  default:
+    type: "CC BY 4.0"
+    url: "https://creativecommons.org/licenses/by/4.0/"
+    copyright_holder: "The Author(s)"
+    statement: >-
+      © {year} {copyright_holder}. Published by {publisher}. This is an open access
+      article distributed under the terms of the Creative Commons Attribution 4.0
+      International License (CC BY 4.0), which permits use, distribution and
+      reproduction in any medium, provided the original work is properly cited.
+  verified: false           # verify: confirm this is the journal's actual policy wording
+policies:
+  open_access: true
+schedule:
+  frequency: "continuous publication"
+urls:
+  landing_live: "https://journals.example.org/sjcr/article/{year}/{volume}/{article_number}"
+  pdf_live: "https://journals.example.org/sjcr/article/{year}/{volume}/{article_number}/pdf"
+  fulltext_live: "https://journals.example.org/sjcr/article/{year}/{volume}/{article_number}/full"
+crossref:
+  doi_prefix: ""            # e.g. 10.xxxxx: required before Crossref export
+  depositor_name: ""
+  depositor_email: ""
+  registrant: "McMed International"
+jats:
+  publisher_loc: ""

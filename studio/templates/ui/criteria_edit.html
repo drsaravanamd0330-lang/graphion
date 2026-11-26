@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="card">
+  <div class="small"><a href="{{ url_for('journals') }}">Journals</a></div>
+  <h1>{{ index|upper }} criteria</h1>
+  <p class="small muted">Saving bumps the version and keeps the previous file. Set <code>verification: verified</code> and <code>last_checked</code> only after comparing the list with the official source.</p>
+  <form method="post">
+    <textarea class="code" name="text" aria-label="Criteria YAML">{{ text }}</textarea>
+    <p><button>Save as new version</button></p>
+  </form>
+  {% if history %}<h3>Earlier versions</h3><ul class="small">{% for h in history %}<li>{{ h.name }}</li>{% endfor %}</ul>{% endif %}
+</div>
+{% endblock %}

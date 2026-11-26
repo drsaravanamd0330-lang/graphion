@@ -1,0 +1,45 @@
+# Journal-level evidence checklist. This is a working summary, not the
+# official text. Confirm every item against the official source before
+# relying on it, then record the date you checked in "last_checked".
+index: scopus
+name: Scopus
+version: 1
+official_sources:
+  - label: Scopus content policy and selection
+    url: https://www.elsevier.com/products/scopus/content/content-policy-and-selection
+last_checked: null
+verification: unverified
+verification_note: >-
+  Written from general knowledge on 2026-11-26. The official page could not be
+  opened from the build environment, so no item here has been checked against
+  it. The Content Selection and Advisory Board (CSAB) applies its own scoring.
+criteria:
+  - id: peer-review
+    text: Content is peer reviewed and the policy is publicly described.
+    evidence_hint: Peer review policy page.
+  - id: issn
+    text: The journal has a registered ISSN.
+    evidence_hint: ISSN portal record.
+    auto: issn
+  - id: publication-history
+    text: The journal has a regular publication history (check the current minimum on the official page).
+    evidence_hint: Archive page with dates of each issue.
+  - id: english-abstracts
+    text: Articles have English abstracts and titles, and references in Roman script.
+    evidence_hint: Sample of recent articles.
+    auto: english_abstracts
+  - id: ethics-statement
+    text: A publicly available publication ethics and malpractice statement.
+    evidence_hint: Ethics policy page.
+  - id: journal-policy
+    text: Convincing editorial policy, with diverse geographic spread of editors and authors.
+    evidence_hint: Editorial board page and author affiliation summary.
+  - id: content-quality
+    text: Academic contribution to the field, clarity of abstracts, and readability of articles.
+    evidence_hint: Sample of recent articles.
+  - id: standing
+    text: Citedness of journal articles in Scopus and editor standing.
+    evidence_hint: Citation report; editor profiles.
+  - id: online-availability
+    text: Full journal content available online, with an English-language homepage.
+    evidence_hint: Journal homepage URL.

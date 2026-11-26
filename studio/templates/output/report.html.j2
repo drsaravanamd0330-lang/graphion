@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Production report · {{ title }} · r{{ '%03d' % report.revision }}</title>
+<style>
+body { font: 15px/1.5 system-ui, sans-serif; margin: 0 auto; max-width: 70rem; padding: 1.5rem; color: #1b1f24; }
+h1 { font-size: 1.4rem; } h2 { font-size: 1.1rem; margin-top: 2rem; }
+table { border-collapse: collapse; width: 100%; } th, td { border-bottom: 1px solid #d0d7de; padding: .35rem .5rem; text-align: left; vertical-align: top; }
+.s { font-weight: 700; white-space: nowrap; } .blocked { color: #b3261e; } .manual { color: #8a4b00; } .warning { color: #6b5d00; } .pass { color: #1a7f37; } .na { color: #57606a; }
+.chip { display: inline-block; padding: .1rem .5rem; border-radius: 1rem; background: #f0f3f6; margin-right: .3rem; }
+code { font-size: .85rem; }
+</style>
+</head>
+<body>
+<h1>Production report</h1>
+<p><strong>{{ title }}</strong><br>{{ journal }} · Article {{ report.article_id }} · Revision r{{ '%03d' % report.revision }} · {{ report.status | upper }} · rendered {{ report.created_at }}</p>
+<p>{% for k, v in report.summary.items() %}<span class="chip {{ k }}">{{ status_label[k] }}: {{ v }}</span>{% endfor %}</p>
+<p>Local proof results are listed below. Live-site results (DOI resolution, open access) are reported separately and only when a live check is run.</p>
+
+<h2>Findings</h2>
+<table>
+<thead><tr><th>Status</th><th>Check</th><th>Explanation</th><th>Field / output</th></tr></thead>
+<tbody>
+{% for f in report.findings %}
+<tr><td class="s {{ f.status }}">{{ f.status_label }}</td><td>{{ f.title }}<br><code>{{ f.check }}</code></td><td>{{ f.explanation }}</td><td><code>{{ f.field }}</code><br>{{ f.output }}</td></tr>
+{% endfor %}
+</tbody>
+</table>
+
+{% if report.live %}
+<h2>Live-site checks (separate from the proof)</h2>
+<table><tbody>{% for f in report.live %}<tr><td class="s {{ f.status }}">{{ f.status_label }}</td><td>{{ f.title }}</td><td>{{ f.explanation }}</td></tr>{% endfor %}</tbody></table>
+{% endif %}
+
+<h2>References</h2>
+<table><thead><tr><th>#</th><th>Printed as</th><th>Source text</th></tr></thead><tbody>
+{% for r in report.references %}<tr><td>{{ r.label }}</td><td>{{ 'CSL style' if r.mode == 'csl' else 'typed text' }}{% if r.note %}<br><small>{{ r.note }}</small>{% endif %}</td><td>{{ r.raw }}</td></tr>{% endfor %}
+</tbody></table>
+
+<h2>URLs</h2>
+<table><tbody>
+<tr><th>Live landing</th><td>{{ report.urls.live.landing_live or 'not resolvable: ' ~ (report.urls.live.landing_live_missing or '') }}</td></tr>
+<tr><th>Live full text</th><td>{{ report.urls.live.fulltext_live or '' }}</td></tr>
+<tr><th>Live PDF</th><td>{{ report.urls.live.pdf_live or '' }}</td></tr>
+<tr><th>Staged (in this package)</th><td>{{ report.urls.staged.landing }}, {{ report.urls.staged.fulltext }}, {{ report.urls.staged.pdf }}</td></tr>
+</tbody></table>
+
+<h2>Inputs this proof was generated from</h2>
+<table><tbody>{% for k, v in report.inputs.items() %}<tr><th>{{ k }}</th><td><code>{{ v }}</code></td></tr>{% endfor %}</tbody></table>
+{% if report.compile_messages %}<h2>Renderer messages</h2><ul>{% for m in report.compile_messages %}<li><code>{{ m }}</code></li>{% endfor %}</ul>{% endif %}
+</body>
+</html>
