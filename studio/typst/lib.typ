@@ -36,6 +36,8 @@
     else if t == "link" { link(n.url, text(fill: C("link"), inl(n.c))) }
     else if t == "br" { linebreak() }
     else if t == "cite" {
+      // The first citation of a reference is where its entry links back to.
+      for a in n.at("anchors", default: ()) [#metadata(a)#label(a)]
       if D.cite_form == "superscript" { super(typographic: false, cite-parts(n.parts)) }
       else { [\[] + cite-parts(n.parts) + [\]] }
     }
@@ -304,6 +306,9 @@
   set text(size: S.size * 0.85pt)
   set par(first-line-indent: 0pt, justify: false)
   for r in D.references {
-    [#block(above: 3pt, grid(columns: (1.8em, 1fr), [#r.label.], inl(r.c)))#label(r.id)]
+    // The number links back to the first place the reference is cited.
+    let num = if r.back != none { link(label(r.back), text(fill: C("link"))[#r.label.]) } else [#r.label.]
+    let up = if r.back != none [ #link(label(r.back), text(fill: C("link"))[↑])] else []
+    [#block(above: 3pt, grid(columns: (1.8em, 1fr), num, [#inl(r.c)#up]))#label(r.id)]
   }
 }

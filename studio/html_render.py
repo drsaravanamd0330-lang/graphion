@@ -17,7 +17,7 @@ from markupsafe import Markup, escape
 from . import config, mathconv
 from .model import DECLARATION_LABELS, plain
 from .profiles import Profile
-from .typst_render import INSERT, cite_parts, fmt_date, insert_dates, insert_mode, locator, short_title
+from .typst_render import INSERT, cite_parts, with_cite_anchors, fmt_date, insert_dates, insert_mode, locator, short_title
 
 _env = Environment(loader=FileSystemLoader(str(config.TEMPLATES_DIR / "output")),
                    autoescape=select_autoescape(["html"]), trim_blocks=True, lstrip_blocks=True)
@@ -54,6 +54,8 @@ def inl(nodes: list[dict] | None, ctx: Ctx) -> Markup:
             parts = "".join(
                 f'<a href="{ctx.ref_href}{escape(rid)}" role="doc-biblioref">{escape(txt)}</a>' if rid else str(escape(txt))
                 for txt, rid in cite_parts(n["refs"], ctx.labels))
+            anchors = "".join(f'<span id="{escape(a)}"></span>' for a in n.get("anchors", []))
+            parts = anchors + parts
             if ctx.cite_form == "superscript":
                 if out and out[-1].endswith(" "):
                     out[-1] = out[-1].rstrip(" ")
@@ -243,6 +245,7 @@ def how_to_cite(record: dict, profile: Profile, ctx: "Ctx") -> Markup:
 def render_pages(record: dict, profile: Profile, refs_rendered: list[dict], watermark: str | None) -> dict[str, str]:
     """Return {'index.html': landing, 'fulltext.html': full text}."""
     cite_form = (profile.data.get("references") or {}).get("in_text", "bracket")
+    record, cited = with_cite_anchors(record)
     mathml = _math_map(record)
     ctx = Ctx(record, mathml, cite_form)
     colors = dict({"primary": "#1f3b63", "accent": "#b5532a", "rule": "#9aa7b8", "muted": "#5b6573"},
@@ -263,7 +266,8 @@ def render_pages(record: dict, profile: Profile, refs_rendered: list[dict], wate
     body = blocks(record["body"], record, body_ctx)
     decls = [{"heading": heads.get(k) or DECLARATION_LABELS[k], "html": blocks(record["declarations"][k], record, ctx, 2)}
              for k in order if record["declarations"].get(k)]
-    refs = [{"id": r["id"], "label": r["label"], "html": inl(r["c"], ctx)} for r in refs_rendered]
+    refs = [{"id": r["id"], "label": r["label"], "html": inl(r["c"], ctx),
+             "back": "cite-" + r["id"] if r["id"] in cited else None} for r in refs_rendered]
     footnotes = [{"id": fid, "n": i + 1, "html": inl(ctx.footnotes[fid]["c"], ctx)} for i, fid in enumerate(ctx.fn_order)]
     dates = [(k.capitalize(), fmt_date(v["value"])) for k, v in record["dates"].items() if v and v.get("value") and v.get("verified")]
     affiliations = record["affiliations"]

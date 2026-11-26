@@ -36,3 +36,14 @@ def test_doi_shown_as_doi_org_link_only_when_it_is_the_references_own():
                                                    "c": [text("10.1016/j.talanta.2026.130236")]}]
     out = link_doi(csl, "10.1016/j.talanta.2026.130236")
     assert plain(out) == "Talanta. 2027;311:130236. https://doi.org/10.1016/j.talanta.2026.130236"
+
+
+def test_first_citation_of_each_reference_is_the_back_link_target():
+    from studio.typst_render import with_cite_anchors
+    rec = {"body": [{"t": "para", "c": [{"t": "cite", "refs": ["ref1", "ref2"]}]},
+                    {"t": "para", "c": [{"t": "cite", "refs": ["ref2", "ref3"]}]}], "tables": [], "figures": []}
+    out, cited = with_cite_anchors(rec)
+    assert cited == {"ref1", "ref2", "ref3"}
+    assert out["body"][0]["c"][0]["anchors"] == ["cite-ref1", "cite-ref2"]
+    assert out["body"][1]["c"][0]["anchors"] == ["cite-ref3"]
+    assert "anchors" not in rec["body"][0]["c"][0]          # the record itself is untouched

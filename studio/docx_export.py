@@ -154,8 +154,8 @@ def _body_html(fulltext: Path) -> str:
     for xp in ('//div[@id="body"]', '//section[contains(@class,"declarations")]',
                '//section[@role="doc-bibliography"]', '//section[@role="doc-endnotes"]'):
         for el in tree.xpath(xp):
-            for a in el.xpath('.//a[@role="doc-backlink"]'):
-                a.drop_tree()
+            for a in el.xpath('.//a[@role="doc-backlink" and not(contains(@class,"backref"))]'):
+                a.drop_tree()   # footnote back-links; a reference's back-link is kept
             parts.append(lhtml.tostring(el, encoding="unicode"))
     return "<html><body>" + "\n".join(parts) + "</body></html>"
 

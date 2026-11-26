@@ -19,7 +19,7 @@
 {% if references %}
 <section aria-labelledby="refs-h" role="doc-bibliography">
 <h2 id="refs-h">References</h2>
-<ol class="references">{% for r in references %}<li id="{{ r.id }}" value="{{ r.label }}">{{ r.html }}</li>{% endfor %}</ol>
+<ol class="references">{% for r in references %}<li id="{{ r.id }}" value="{{ r.label }}">{{ r.html }}{% if r.back %} <a class="backref" href="#{{ r.back }}" role="doc-backlink" aria-label="Back to where reference {{ r.label }} is first cited">↑</a>{% endif %}</li>{% endfor %}</ol>
 </section>
 {% endif %}
 {% if footnotes %}

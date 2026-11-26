@@ -31,6 +31,23 @@ def fmt_date(iso: str) -> str:
     return f"{d.day} {d.strftime('%B')} {d.year}"
 
 
+def with_cite_anchors(record: dict) -> tuple[dict, set]:
+    """A copy of the record in which the first citation of each reference,
+    in reading order (body text first, then captions and tables), carries
+    ``anchors``: the ids its reference links back to (``cite-ref3``)."""
+    import copy
+    from .model import walk_inlines
+    rec = copy.deepcopy(record)
+    seen: set = set()
+    for n in walk_inlines(rec):
+        if n.get("t") == "cite":
+            new = [r for r in n.get("refs", []) if r not in seen]
+            if new:
+                n["anchors"] = ["cite-" + r for r in new]
+                seen.update(new)
+    return rec, seen
+
+
 def cite_parts(refs: list[str], labels: dict[str, str]) -> list[list]:
     """Group cited reference numbers into ranges, each linked to its entry."""
     nums = []
@@ -260,6 +277,7 @@ def _template_fill_one(tpl: str, values: dict) -> str:
 
 def build_view(record: dict, profile: Profile, watermark: str | None) -> tuple[dict, dict]:
     """The Typst data model plus facts about the render for the report."""
+    record, cited = with_cite_anchors(record)
     data = profile.data
     atype = profile.article_type(record["article_type"])
     variant = atype.get("template", "research")
@@ -422,7 +440,8 @@ def build_view(record: dict, profile: Profile, watermark: str | None) -> tuple[d
         "figures": figures, "tables": tables, "equations": equations,
         "footnotes": {f["id"]: _prepare_inlines(f["c"], ctx) for f in record.get("footnotes", [])},
         "declarations": declarations,
-        "references": [{"id": r["id"], "label": r["label"], "c": _prepare_inlines(r["c"], ctx)} for r in refs],
+        "references": [{"id": r["id"], "label": r["label"], "c": _prepare_inlines(r["c"], ctx),
+                        "back": "cite-" + r["id"] if r["id"] in cited else None} for r in refs],
         "license": {"statement": lic["statement"], "url": lic.get("url"), "type": lic.get("type")} if lic else None,
         "header": {"odd": _template_fill(layout.get("running_header", "{journal_abbreviation}"), hdr_values)
                    or _template_fill("{journal_abbreviation}", hdr_values),
