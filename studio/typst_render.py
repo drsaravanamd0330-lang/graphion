@@ -115,6 +115,40 @@ def _all_math(record: dict) -> list[str]:
     return out
 
 
+DOI_TEXT_RE = re.compile(r"(?:doi:\s*|https?://(?:dx\.)?doi\.org/)(10\.\d{4,9}/\S+?)(?=[.,;]?(?:\s|$))", re.I)
+
+
+def link_doi(nodes: list, doi: str) -> list:
+    """Show the DOI as a live https://doi.org/ link, as Crossref asks DOIs to
+    be displayed. The DOI printed is the one the reference carries, and only
+    where its text already holds that DOI; nothing is looked up or added."""
+    url = "https://doi.org/" + doi
+    # Pandoc's citeproc already emits the DOI as a link, after a "doi:" text.
+    for i, n in enumerate(nodes):
+        if n.get("t") == "link" and doi.lower() in (n.get("url") or "").lower():
+            out = [dict(x) for x in nodes]
+            out[i] = {"t": "link", "url": url, "c": [text(url)]}
+            if i and out[i - 1].get("t") == "text":
+                out[i - 1] = text(re.sub(r"(?:doi:|DOI:)\s*$", "", out[i - 1]["v"]))
+            return out
+    out, done = [], False
+    for n in nodes:
+        if not done and n.get("t") == "text":
+            m = DOI_TEXT_RE.search(n["v"])
+            if m and m.group(1).rstrip(".").lower() == doi.lower():
+                if n["v"][: m.start()]:
+                    out.append(text(n["v"][: m.start()]))
+                out.append({"t": "link", "url": url, "c": [text(url)]})
+                if n["v"][m.end():]:
+                    out.append(text(n["v"][m.end():]))
+                done = True
+                continue
+        out.append(n)
+    if not done:   # the DOI was split across nodes or printed without its prefix
+        return nodes
+    return out
+
+
 def epub_date(iso: str) -> str:
     """2026-07-01 -> 2026 Jul 1 (NLM)."""
     d = dt.date.fromisoformat(str(iso))
@@ -143,6 +177,8 @@ def format_references(record: dict, profile: Profile) -> list[dict]:
             entry["c"] = [text(r["raw"])]
             if r.get("csl"):
                 entry["note"] = "CSL formatting unavailable (Pandoc citeproc did not run); typed text kept"
+        if r.get("doi"):
+            entry["c"] = link_doi(entry["c"], r["doi"])
         if r.get("epub"):
             # The online date of an item whose volume carries a later year,
             # in the NLM form ("Epub 2026 Jul 1"). Set by an editor, with the
@@ -233,6 +269,7 @@ def build_view(record: dict, profile: Profile, watermark: str | None) -> tuple[d
                  **(branding.get("fonts") or {}))
     colors = dict({"primary": "#1f3b63", "accent": "#b5532a", "rule": "#9aa7b8", "muted": "#5b6573", "ink": "#000000"},
                   **(branding.get("colors") or {}))
+    colors.setdefault("link", colors["primary"])   # citation numbers, cross-references, DOIs
     margins = layout.get("margins") or {}
     columns = atype.get("columns", layout.get("columns", 2))
     style = {

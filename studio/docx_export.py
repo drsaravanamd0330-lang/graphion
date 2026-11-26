@@ -90,7 +90,7 @@ def _reference_docx(path: Path, view: dict) -> None:
             _set_font(by_name[name], body_font)
     if "Hyperlink" in by_name:
         h = by_name["Hyperlink"]
-        h.font.color.rgb = head_color
+        h.font.color.rgb = _hex(st["colors"].get("link") or st["colors"].get("primary"))
         h.font.underline = False
     for name in ("Table", "Table Caption", "Image Caption", "Caption"):
         s = by_name.get(name)
@@ -232,14 +232,22 @@ def build_docx(view: dict, fulltext: Path, logo: Path | None, out: Path, timesta
                             rpr.append(OxmlElement("w:b"))
 
     # References: ragged right and a size smaller, as in the PDF.
-    in_refs = False
+    # Each reference and table caption gets the bookmark its in-text links
+    # point at (#ref3, #tab1), which Pandoc drops from list items.
+    ref_ids = [r["id"] for r in view.get("references") or []]
+    tab_ids = list((view.get("tables") or {}).keys())
+    in_refs, bm = False, [1000]
     for p in doc.paragraphs:
         if p.style.name.startswith("Heading"):
             in_refs = p.text.strip().lower() == "references"
             continue
-        if in_refs:
+        if in_refs and p.text.strip():
             p.alignment = WD_ALIGN_PARAGRAPH.LEFT   # the list keeps its own hanging indent
             _run_size(p._p, size - 1.5)
+            if ref_ids:
+                _bookmark(p._p, ref_ids.pop(0), bm)
+        elif "TableCaption" in _pstyle(p._p) and tab_ids:
+            _bookmark(p._p, tab_ids.pop(0), bm)
 
     # ---- front matter, inserted before the first body paragraph
     anchor = doc.paragraphs[0]
@@ -455,6 +463,21 @@ def _isolate_wide(tbl, body_sect, cols: int, gap_mm: float) -> None:
 
     first.addprevious(brk(cols))   # ends the columned text before the table
     last.addnext(brk(1))           # ends the one-column table section
+
+
+def _bookmark(p_el, name: str, counter: list) -> None:
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+    counter[0] += 1
+    start, end = OxmlElement("w:bookmarkStart"), OxmlElement("w:bookmarkEnd")
+    start.set(qn("w:id"), str(counter[0])), start.set(qn("w:name"), name)
+    end.set(qn("w:id"), str(counter[0]))
+    ppr = p_el.find(qn("w:pPr"))
+    if ppr is not None:
+        ppr.addnext(start)
+    else:
+        p_el.insert(0, start)
+    p_el.append(end)
 
 
 def _run_size(p_el, pt: float) -> None:

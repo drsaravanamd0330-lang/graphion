@@ -13,7 +13,7 @@ journal:
   editor_in_chief: ""
 branding:
   logo: logo.jpeg                                      # from the template
-  colors: {primary: "#000000", accent: "#6b1f1f", rule: "#000000", muted: "#333333", ink: "#000000"}
+  colors: {primary: "#000000", accent: "#6b1f1f", rule: "#000000", muted: "#333333", ink: "#000000", link: "#0b5cad"}
   fonts: {body: "Liberation Serif", heading: "Liberation Serif", sans: "Carlito", size: 10}
 layout:
   page: a4

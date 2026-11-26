@@ -247,6 +247,7 @@ def render_pages(record: dict, profile: Profile, refs_rendered: list[dict], wate
     ctx = Ctx(record, mathml, cite_form)
     colors = dict({"primary": "#1f3b63", "accent": "#b5532a", "rule": "#9aa7b8", "muted": "#5b6573"},
                   **((profile.data.get("branding") or {}).get("colors") or {}))
+    colors.setdefault("link", colors["primary"])
     pub = record["publication"]
     atype = profile.article_type(record["article_type"])
     aff_labels = {a["id"]: a["label"] for a in record["affiliations"]}

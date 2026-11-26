@@ -20,7 +20,7 @@
 
 #let cite-parts(parts) = {
   for p in parts {
-    if p.at(1) == none { p.at(0) } else { link(label(p.at(1)), p.at(0)) }
+    if p.at(1) == none { p.at(0) } else { link(label(p.at(1)), text(fill: C("link"), p.at(0))) }
   }
 }
 
@@ -33,14 +33,14 @@
     else if t == "sup" { super(inl(n.c)) }
     else if t == "sub" { sub(inl(n.c)) }
     else if t == "smallcaps" { smallcaps(inl(n.c)) }
-    else if t == "link" { link(n.url, inl(n.c)) }
+    else if t == "link" { link(n.url, text(fill: C("link"), inl(n.c))) }
     else if t == "br" { linebreak() }
     else if t == "cite" {
       if D.cite_form == "superscript" { super(typographic: false, cite-parts(n.parts)) }
       else { [\[] + cite-parts(n.parts) + [\]] }
     }
     else if t == "xref" {
-      if n.at("ok", default: false) { link(label(n.target), n.v) } else { n.v }
+      if n.at("ok", default: false) { link(label(n.target), text(fill: C("link"), n.v)) } else { n.v }
     }
     else if t == "math" {
       if n.at("typst", default: none) != none { math.equation(block: false, eval(n.typst, mode: "math")) }

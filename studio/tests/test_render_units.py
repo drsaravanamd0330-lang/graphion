@@ -21,3 +21,18 @@ def test_unverified_dates_print_as_insert():
     assert got["Received"] == "2026-01-02"
     assert got["Accepted"] == INSERT.format("date")   # an unverified date is never printed as fact
     assert got["Published"] == INSERT.format("date")
+
+
+def test_doi_shown_as_doi_org_link_only_when_it_is_the_references_own():
+    from studio.model import plain, text
+    from studio.typst_render import link_doi
+    typed = [text("J Pharm Sci. 2025;114:1. doi:10.1016/j.xphs.2025.103749")]
+    out = link_doi(typed, "10.1016/j.xphs.2025.103749")
+    assert out[-1] == {"t": "link", "url": "https://doi.org/10.1016/j.xphs.2025.103749",
+                       "c": [text("https://doi.org/10.1016/j.xphs.2025.103749")]}
+    assert "doi:" not in plain(out)
+    assert link_doi(typed, "10.9999/other") == typed          # never swaps in a different DOI
+    csl = [text("Talanta. 2027;311:130236. doi:"), {"t": "link", "url": "https://doi.org/10.1016/j.talanta.2026.130236",
+                                                   "c": [text("10.1016/j.talanta.2026.130236")]}]
+    out = link_doi(csl, "10.1016/j.talanta.2026.130236")
+    assert plain(out) == "Talanta. 2027;311:130236. https://doi.org/10.1016/j.talanta.2026.130236"

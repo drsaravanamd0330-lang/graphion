@@ -7,10 +7,11 @@
 {% if license and license.url %}<link rel="license" href="{{ license.url }}">{% endif %}
 <script type="application/ld+json">{{ jsonld }}</script>
 <style>
-:root { --primary: {{ colors.primary }}; --accent: {{ colors.accent }}; --rule: {{ colors.rule }}; --muted: {{ colors.muted }}; }
+:root { --primary: {{ colors.primary }}; --accent: {{ colors.accent }}; --rule: {{ colors.rule }}; --muted: {{ colors.muted }}; --link: {{ colors.link }}; }
 * { box-sizing: border-box; }
 body { margin: 0; font: 17px/1.6 Georgia, "Libertinus Serif", "Times New Roman", serif; color: #1b1f24; background: #fff; }
 a { color: var(--primary); }
+.cite a, a.xref, .references a { color: var(--link); }
 a:focus-visible, [tabindex]:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 .skip { position: absolute; left: -999px; } .skip:focus { left: 1rem; top: 1rem; background: #fff; padding: .4rem .8rem; z-index: 2; }
 header.masthead { background: var(--primary); color: #fff; padding: .9rem 1.25rem; font-family: system-ui, sans-serif; }
