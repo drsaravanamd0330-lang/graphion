@@ -1,0 +1,82 @@
+# IJIDD profile, built from the journal's Word template (the .doc supplied on
+# 2026-11-26). Values marked "verify" were read from that template or not
+# supplied at all; confirm them before publication. Studio never invents an
+# ISSN, DOI prefix or licence.
+profile_version: 1
+journal:
+  title: "International Journal of Innovative Drug Discovery"   # from the template masthead
+  abbreviation: "IJIDD"                                          # verify: official abbreviation
+  homepage: "https://www.ijidd.com"                              # from the template masthead
+  language: en
+  issn_print:  {value: "2249-7617", verified: false}   # from the template; check digit valid; verify at portal.issn.org
+  issn_online: {value: "2249-7609", verified: false}   # from the template; check digit valid; verify at portal.issn.org
+  editor_in_chief: ""
+branding:
+  logo: logo.jpeg                                      # from the template
+  colors: {primary: "#000000", accent: "#6b1f1f", rule: "#000000", muted: "#333333", ink: "#000000"}
+  fonts: {body: "Liberation Serif", heading: "Liberation Serif", sans: "Carlito", size: 10}
+layout:
+  page: a4
+  margins: {top: 20mm, bottom: 20mm, inside: 16mm, outside: 16mm}
+  columns: 2
+  column_gap: 7mm
+  running_header: "{first_author_surname} et al. / Vol {volume} / Issue {issue} / {year} / {locator}"
+  running_header_even: "{first_author_surname} et al. / Vol {volume} / Issue {issue} / {year} / {locator}"
+  footer: "{doi_url}"
+  table_font_size: 8
+  house:
+    masthead: boxed
+    title_case: upper
+    title_size: 14
+    title_align: justify
+    abstract_box: framed
+    abstract_heading: "ABSTRACT"
+    keywords_label: "KEY WORDS"
+    header_style: left-italic
+    heading_color: ink
+    first_line_indent: 2.0
+    missing: insert          # print "[Insert ...]" in the proof where a value is missing
+article_types:
+  original-research:
+    label: Research Article
+    template: research
+    abstract: {required: true, structured: false, max_words: 300}
+    keywords: {min: 3, max: 8}
+    required_declarations: [funding, conflicts, contributions]
+  review:
+    label: Review Article
+    template: review
+    abstract: {required: true, structured: true, max_words: 300}
+    keywords: {min: 3, max: 10}
+    required_declarations: [funding, conflicts, contributions]
+  case-report:
+    label: Case Report
+    template: case-report
+    abstract: {required: true, structured: false, max_words: 250}
+    keywords: {min: 3, max: 6}
+    required_declarations: [funding, conflicts, consent]
+  editorial:
+    label: Editorial
+    template: editorial
+    columns: 1
+    abstract: {required: false}
+    keywords: {min: 0, max: 6}
+    required_declarations: [conflicts]
+declarations_order: [funding, conflicts, contributions, data_availability, acknowledgements, ethics, consent, trial_registration]
+references:
+  csl: vancouver-nlm.csl      # the template's reference list is Vancouver style
+  in_text: bracket
+numbering:
+  model: pages                # the template header gives a page range
+  locator_format: "{first_page}-{last_page}"
+license: {}                   # verify: no licence statement was supplied; enter the journal's own
+policies:
+  open_access: null           # verify
+urls: {}
+crossref:
+  doi_prefix: ""
+  depositor_name: ""
+  depositor_email: ""
+  registrant: ""
+jats:
+  publisher_loc: ""

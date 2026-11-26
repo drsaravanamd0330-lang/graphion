@@ -153,12 +153,18 @@ def readiness(findings: list[Finding | dict], acks: dict) -> dict:
 
 # ------------------------------------------------------------------ inputs and keys
 
+RENDER_MODULES = ("typst_render.py", "html_render.py", "references.py")
+
+
 def template_hash(profile: Profile) -> str:
     h = hashlib.sha256()
     files = [config.TYPST_DIR / "lib.typ", profile.csl_path()]
     files += sorted((config.PACKAGE_DIR / "fonts").glob("*.[ot]tf"))
     files += sorted((profile.path / "fonts").glob("*.[ot]tf")) if (profile.path / "fonts").is_dir() else []
     files += sorted((config.TEMPLATES_DIR / "output").glob("*.j2"))
+    # The code that turns a record into a page is part of the template: a
+    # change to it must make a new revision rather than reuse an old one.
+    files += [config.PACKAGE_DIR / n for n in RENDER_MODULES]
     for f in files:
         h.update(f.name.encode() + b"\0" + f.read_bytes())
     return h.hexdigest()[:16]

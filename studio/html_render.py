@@ -17,7 +17,7 @@ from markupsafe import Markup, escape
 from . import config, mathconv
 from .model import DECLARATION_LABELS, plain
 from .profiles import Profile
-from .typst_render import cite_parts, fmt_date, locator, short_title
+from .typst_render import INSERT, cite_parts, fmt_date, insert_dates, insert_mode, locator, short_title
 
 _env = Environment(loader=FileSystemLoader(str(config.TEMPLATES_DIR / "output")),
                    autoescape=select_autoescape(["html"]), trim_blocks=True, lstrip_blocks=True)
@@ -265,14 +265,33 @@ def render_pages(record: dict, profile: Profile, refs_rendered: list[dict], wate
     refs = [{"id": r["id"], "label": r["label"], "html": inl(r["c"], ctx)} for r in refs_rendered]
     footnotes = [{"id": fid, "n": i + 1, "html": inl(ctx.footnotes[fid]["c"], ctx)} for i, fid in enumerate(ctx.fn_order)]
     dates = [(k.capitalize(), fmt_date(v["value"])) for k, v in record["dates"].items() if v and v.get("value") and v.get("verified")]
+    affiliations = record["affiliations"]
+    lic = record.get("license")
+    placeholders = {}
+    if insert_mode(profile):
+        # Display only, as in the PDF: meta tags and JSON-LD read the record.
+        if not authors:
+            authors = [{"name": INSERT.format("author names"), "sup": "1", "corresponding": True,
+                        "email": INSERT.format("corresponding author email"), "orcid": None}]
+        else:
+            for a in authors:
+                if a["corresponding"] and not a["email"]:
+                    a["email"] = INSERT.format("email")
+        if not affiliations:
+            affiliations = [{"label": "1", "raw": INSERT.format("department, institution, city, country")}]
+        dates = insert_dates(record, fmt_date)
+        if not lic:
+            lic = {"statement": INSERT.format("licence statement"), "url": None}
+        placeholders = {k: INSERT.format(w) for k, w in (("year", "year"), ("volume", "volume"), ("issue", "issue"),
+                        ("locator", "pages"), ("doi", "DOI")) if not (loc if k == "locator" else pub.get(k))}
     common = dict(
         record=record, journal=record["journal"], pub=pub, colors=colors, authors=authors,
-        affiliations=record["affiliations"], title=inl(record["title"]["en"], ctx),
+        affiliations=affiliations, placeholders=placeholders, title=inl(record["title"]["en"], ctx),
         title_text=plain(record["title"]["en"]), title_original=inl(record["title"].get("original"), ctx),
         title_original_lang=record["title"].get("original_lang"),
         article_type=atype.get("label", record["article_type"]), locator=loc,
         doi_url=f"https://doi.org/{pub['doi']}" if pub.get("doi") else None, dates=dates,
-        abstract=abstract, keywords=record.get("keywords") or [], license=record.get("license"),
+        abstract=abstract, keywords=record.get("keywords") or [], license=lic,
         meta=meta_tags(record, profile), jsonld=Markup(json_ld(record)), urls=record["urls"],
         supplementary=record.get("supplementary") or [], watermark=watermark,
         lang=record.get("language", "en"), short_title=record.get("short_title") or short_title(plain(record["title"]["en"])),

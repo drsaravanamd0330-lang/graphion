@@ -279,6 +279,36 @@ def unwrap(blocks: list) -> list[tuple[str | None, dict]]:
     return out
 
 
+def _meta_blocks(meta: dict) -> list[tuple[str | None, dict]]:
+    """Pandoc's DOCX reader moves paragraphs in the Word Title, Subtitle,
+    Author, Date and Abstract styles out of the body into document metadata.
+    Put them back at the front, in that order, so the front-matter parser
+    sees the manuscript as it was written."""
+    def inlines(v):
+        if v.get("t") == "MetaInlines":
+            return v["c"]
+        if v.get("t") == "MetaBlocks":
+            return [i for b in v["c"] if b.get("t") in ("Para", "Plain") for i in b["c"]]
+        if v.get("t") == "MetaString":
+            return [{"t": "Str", "c": v["c"]}]
+        return []
+    out: list[tuple[str | None, dict]] = []
+    for key, style in (("title", "Title"), ("subtitle", "Subtitle")):
+        if key in meta:
+            out.append((style, {"t": "Para", "c": inlines(meta[key])}))
+    if "author" in meta:
+        a = meta["author"]
+        items = a["c"] if a.get("t") == "MetaList" else [a]
+        for it in items:
+            out.append(("Author", {"t": "Para", "c": inlines(it)}))
+    if "date" in meta:
+        out.append(("Date", {"t": "Para", "c": inlines(meta["date"])}))
+    if "abstract" in meta and meta["abstract"].get("t") == "MetaBlocks":
+        out.append((None, {"t": "Header", "c": [1, ["", [], []], [{"t": "Str", "c": "Abstract"}]]}))
+        out.extend((None, b) for b in meta["abstract"]["c"])
+    return out
+
+
 def block_inlines(b: dict) -> list | None:
     if b.get("t") in ("Para", "Plain"):
         return b["c"]
@@ -484,6 +514,28 @@ def _strip_prefix(inlines: list[dict], pattern: re.Pattern) -> list[dict]:
     return _merge(out)
 
 
+_RUN_IN_RE = re.compile(r"(?:^|(?<=[.;]\s))(" + "|".join(f"(?:{pat})" for _, pat in DECLARATION_PATTERNS) + r")\s*:\s*", re.I)
+
+
+def _split_run_in_declarations(t: str) -> list[tuple[str, str, str]] | None:
+    """Split 'Funding: None. Conflicts of interest: None.' into
+    (key, label, text) triples. Only a paragraph that starts with a
+    declaration label is split, so body prose mentioning funding is left
+    alone."""
+    matches = list(_RUN_IN_RE.finditer(t))
+    if not matches or matches[0].start() != 0:
+        return None
+    out = []
+    for m, nxt in zip(matches, matches[1:] + [None]):
+        label = m.group(1).strip()
+        key = declaration_key(label)
+        if key is None:
+            return None
+        value = t[m.end(): nxt.start() if nxt else len(t)].strip()
+        out.append((key, label[0].upper() + label[1:], value))
+    return out
+
+
 def declaration_key(heading: str) -> str | None:
     h = re.sub(r"^\s*[\dIVX]+(\.\d+)*\.?\s+", "", heading).strip().rstrip(":").lower()
     for key, pat in DECLARATION_PATTERNS:
@@ -562,7 +614,7 @@ def import_docx(docx_path: Path, media_out: Path, cite_superscript_source: bool 
         for w in warnings:
             record["flags"].append(flag("pandoc-warning", "warning", f"Pandoc: {w}", "source"))
         ctx = Ctx()
-        blocks = unwrap(ast.get("blocks", []))
+        blocks = _meta_blocks(ast.get("meta", {})) + unwrap(ast.get("blocks", []))
         _assemble(record, blocks, ctx, Path(tmp), Path(media_out), cite_superscript_source)
     record["footnotes"] = ctx.footnotes
     record["flags"].extend(ctx.flags)
@@ -930,6 +982,25 @@ def _body(record: dict, blocks: list, ctx: Ctx, tmp: Path, media_out: Path, cite
                 eid = f"eq{eq_auto}"
                 record["equations"].append({"id": eid, "label": f"({eq_auto})", "tex": inl[0]["c"][1]})
                 emit({"t": "equation", "id": eid})
+                i += 1
+                continue
+            # a figure caption or artwork brief with no image beside it
+            m_fig = re.match(r"^\s*(Figure|Fig\.?)\s+(\d+)\b[^.:]{0,40}[.:]", plain(conv_inlines(inl, Ctx())))
+            if m_fig and not any(x.get("t") == "Image" for x in inl) and not (
+                    i > 0 and any(x.get("t") == "Image" for x in (block_inlines(blocks[i - 1][1]) or []))):
+                flags.append(flag("figure-without-image", "blocked",
+                                  f"Figure {m_fig.group(2)} is described in the manuscript but no image is embedded. "
+                                  "The description is printed as text until the artwork is supplied.", "figures"))
+            # run-in declarations: "Funding: ... Conflicts of interest: ..."
+            run_in = _split_run_in_declarations(plain(conv_inlines(inl, Ctx())))
+            if run_in:
+                for key, label, value in run_in:
+                    record["declarations"][key] = (record["declarations"].get(key) or []) + [
+                        {"t": "para", "c": link_text([text(value)], cite_sup)}]
+                    record.setdefault("declaration_headings", {})[key] = label
+                flags.append(flag("declarations-run-in", "info",
+                                  "Declarations written as one run-in paragraph were split by their labels: "
+                                  + ", ".join(l for _, l, _ in run_in) + ".", "declarations"))
                 i += 1
                 continue
             images = [x for x in inl if x.get("t") == "Image"]

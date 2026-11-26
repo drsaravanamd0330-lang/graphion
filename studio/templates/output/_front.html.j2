@@ -6,12 +6,12 @@
 <main id="main">
 <article>
 <p class="type">{{ article_type }}</p>
-<p class="citeline">{{ journal.abbreviation }}{% if pub.year %} {{ pub.year }}{% endif %}{% if pub.volume %};{{ pub.volume }}{% endif %}{% if pub.issue %}({{ pub.issue }}){% endif %}{% if locator %}:{{ locator }}{% endif %}{% if doi_url %} · <a href="{{ doi_url }}">{{ doi_url }}</a>{% endif %}</p>
+{% set ph = placeholders or {} %}<p class="citeline">{{ journal.abbreviation }}{% if pub.year %} {{ pub.year }}{% elif ph.year %} {{ ph.year }}{% endif %}{% if pub.volume %};{{ pub.volume }}{% elif ph.volume %}; Vol {{ ph.volume }}{% endif %}{% if pub.issue %}({{ pub.issue }}){% elif ph.issue %} Issue {{ ph.issue }}{% endif %}{% if locator %}:{{ locator }}{% elif ph.locator %}: {{ ph.locator }}{% endif %}{% if doi_url %} · <a href="{{ doi_url }}">{{ doi_url }}</a>{% elif ph.doi %} · DOI: {{ ph.doi }}{% endif %}</p>
 <h1 class="title">{{ title }}</h1>
 {% if title_original %}<p class="title-original" lang="{{ title_original_lang or '' }}">{{ title_original }}</p>{% endif %}
 <p class="authors">{% for a in authors %}{{ a.name }}<sup>{{ a.sup }}{% if a.corresponding %}*{% endif %}</sup>{% if a.orcid %} <a class="orcid" href="https://orcid.org/{{ a.orcid }}" aria-label="ORCID iD for {{ a.name }}: {{ a.orcid }}">iD</a>{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}</p>
 <div class="affiliations"><ol>{% for af in affiliations %}<li><sup>{{ af.label }}</sup> {{ af.raw }}</li>{% endfor %}</ol></div>
-{% for a in authors if a.corresponding and a.email %}<p class="corresp">*Correspondence: {{ a.name }}, <a href="mailto:{{ a.email }}">{{ a.email }}</a></p>{% endfor %}
+{% for a in authors if a.corresponding and a.email %}<p class="corresp">*Correspondence: {{ a.name }}, {% if a.email.startswith('[Insert') %}{{ a.email }}{% else %}<a href="mailto:{{ a.email }}">{{ a.email }}</a>{% endif %}</p>{% endfor %}
 {% if dates %}<p class="dates">{% for k, v in dates %}{{ k }}: {{ v }}{% if not loop.last %} · {% endif %}{% endfor %}</p>{% endif %}
 <nav class="links" aria-label="Article formats">
   <a class="primary" href="article.pdf">Download PDF</a>

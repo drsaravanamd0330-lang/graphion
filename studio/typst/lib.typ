@@ -12,6 +12,7 @@
 #let D = json("data.json")
 #let S = D.style
 #let C(key) = rgb(S.colors.at(key))
+#let H = S.house
 
 // ------------------------------------------------------------------ inlines
 
@@ -149,25 +150,48 @@
       [#text(size: 11.5pt, weight: "bold", m.journal_title) \ #text(size: 7pt, m.issn_line + if m.issn_line != "" and m.url != "" [ · ] + link(m.url, m.url))],
       align(right, text(size: 7pt, m.publisher)))
   })
-  band
+  if H.masthead == "boxed" {
+    // Logo at the left, journal name large, ISSNs at the right, all inside one ruled box.
+    block(width: 100%, stroke: 0.8pt + C("ink"), inset: 0pt, grid(
+      columns: if m.logo != none { (62pt, 1fr) } else { (1fr,) },
+      ..if m.logo != none { (block(inset: 6pt, image(m.logo, width: 50pt, alt: m.journal_title + " logo")),) } else { () },
+      block(width: 100%, stroke: (left: 0.8pt + C("ink")), inset: (x: 6pt, y: 4pt), {
+        set text(font: S.fonts.sans, fill: C("ink"))
+        let (pre, main) = if m.journal_title.starts-with("International Journal of ") {
+          ("International Journal of", m.journal_title.slice(25))
+        } else { (none, m.journal_title) }
+        if pre != none { text(size: 8pt, pre); linebreak() }
+        text(size: 20pt, main)
+        grid(columns: (1fr, auto), align: (left + bottom, right + bottom),
+          text(size: 7.5pt, link(m.url, m.url.replace("https://", "").replace("http://", ""))),
+          text(size: 7.5pt, m.issn_lines.join(linebreak())))
+      })))
+  } else { band }
   v(5pt)
   grid(columns: (1fr, auto), align: (left + horizon, right + horizon),
     text(font: S.fonts.sans, size: 8pt, weight: "bold", fill: C("accent"), upper(D.article_type_label)),
     text(font: S.fonts.sans, size: 7.5pt, fill: C("muted"), D.article_line))
   if D.doi_url != none {
     align(right, text(font: S.fonts.sans, size: 7.5pt, link(D.doi_url, D.doi_url)))
+  } else if D.doi_placeholder != none {
+    align(right, text(font: S.fonts.sans, size: 7.5pt, [DOI: #D.doi_placeholder]))
   }
 }
 
 #let abstract-block = {
   if D.abstract == none { return }
-  let heading-text = text(font: S.fonts.heading, weight: "bold", size: 9pt, fill: C("primary"), D.abstract.heading)
+  let heading-text = text(font: S.fonts.heading, weight: "bold", size: 9pt, fill: C("primary"),
+    if H.abstract_heading != none { H.abstract_heading } else { D.abstract.heading })
   let secs = for s in D.abstract.sections {
     par(justify: true)[#if s.label != none [#text(weight: "bold", fill: C("primary"))[#s.label:] ]#inl(s.c)]
   }
-  let kw = if D.keywords != "" { par[#text(weight: "bold", fill: C("primary"))[Keywords:] #D.keywords] }
+  let kw = if D.keywords != "" { par[#text(weight: "bold", fill: C("primary"))[#H.keywords_label:] #D.keywords] }
   let inner = [#heading-text #v(2pt) #set text(size: S.size * 0.92pt); #set par(first-line-indent: 0pt); #secs #kw]
-  if D.variant == "research" {
+  if H.abstract_box == "framed" {
+    // Double rule frame in the accent colour.
+    block(width: 100%, stroke: 2.2pt + C("accent"), inset: 2pt,
+      block(width: 100%, stroke: 0.6pt + C("accent"), inset: 8pt, inner))
+  } else if D.variant == "research" {
     block(width: 100%, fill: C("primary").lighten(92%), inset: 8pt, radius: 2pt, inner)
   } else if D.variant == "review" {
     block(width: 100%, inset: (y: 7pt), stroke: (top: 1pt + C("primary"), bottom: 1pt + C("primary")), inner)
@@ -179,8 +203,9 @@
 #let front = {
   masthead
   v(8pt)
-  block(text(font: S.fonts.heading, size: if D.variant == "editorial" { 20pt } else { 17pt }, weight: "bold",
-       fill: C("primary"), hyphenate: false, inl(D.title)))
+  block(par(justify: H.title_align == "justify", first-line-indent: 0pt,
+    text(font: S.fonts.heading, size: if D.variant == "editorial" { 20pt } else { H.title_size * 1pt }, weight: "bold",
+       fill: C(H.heading_color), hyphenate: false, if H.title_case == "upper" { upper(inl(D.title)) } else { inl(D.title) })))
   if D.title_original != none {
     block(above: 4pt, text(size: 12pt, style: "italic", fill: C("muted"), lang: D.title_original_lang, inl(D.title_original)))
   }
@@ -201,10 +226,10 @@
 
 // ------------------------------------------------------------------ document
 
-#set document(title: D.document_title, author: D.authors.map(a => a.name), keywords: D.keyword_list)
+#set document(title: D.document_title, author: D.meta_authors, keywords: D.keyword_list)
 #set text(font: S.fonts.body, size: S.size * 1pt, lang: D.lang, hyphenate: true)
-#set par(justify: true, leading: 0.55em, spacing: 0.75em, first-line-indent: (amount: 1em, all: false))
-#show heading: set text(font: S.fonts.heading, fill: C("primary"))
+#set par(justify: true, leading: 0.55em, spacing: 0.75em, first-line-indent: (amount: H.first_line_indent * 1em, all: false))
+#show heading: set text(font: S.fonts.heading, fill: C(H.heading_color))
 #show heading.where(level: 1): it => block(above: 1.1em, below: 0.6em, sticky: true, text(size: S.size * 1.12pt, weight: "bold", it.body))
 #show heading.where(level: 2): it => block(above: 0.9em, below: 0.5em, sticky: true, text(size: S.size * 1pt, weight: "bold", style: "italic", it.body))
 #show heading.where(level: 3): it => block(above: 0.8em, below: 0.4em, sticky: true, text(size: S.size * 1pt, style: "italic", it.body))
@@ -230,7 +255,11 @@
   columns: S.columns,
   header: context {
     let p = counter(page).get().first()
-    if p > 1 {
+    if H.header_style == "left-italic" {
+      set text(size: 7.5pt, fill: C("muted"))
+      grid(columns: (1fr, auto), align: (left + bottom, right + bottom),
+        text(style: "italic", if calc.even(p) { D.header.even } else { D.header.odd }), text(size: 9pt, str(p)))
+    } else if p > 1 {
       set text(size: 7pt, fill: C("muted"), font: S.fonts.sans)
       grid(columns: (1fr, 1fr), align: (left, right),
         if calc.even(p) [#p #h(6pt) #D.header.even] else [#D.header.odd],

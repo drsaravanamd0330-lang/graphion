@@ -34,7 +34,7 @@ STATUS_ORDER = {BLOCKED: 0, MANUAL: 1, WARNING: 2, PASS: 3, NA: 4}
 
 PLACEHOLDER_RE = re.compile(
     r"\b(XXX+|TBD|TODO|INSERT\s+\w+|lorem ipsum|Error! Reference source not found|\[\[[^\]]*\]\]|\?\?+|"
-    r"\[(?:citation|ref|reference)\s+needed\]|<<[^>]*>>|\{(?:year|volume|issue|doi|copyright_holder|publisher|article_number)\})", re.I)
+    r"\[(?:citation|ref|reference)\s+needed\]|\[(?:to\s+be\s+(?:completed|added|confirmed|inserted|supplied)|authors?\s+to\s+|insert\s|add\s)[^\]]*\]|<<[^>]*>>|\{(?:year|volume|issue|doi|copyright_holder|publisher|article_number)\})", re.I)
 NON_LATIN_RE = re.compile(r"[Ͱ-ϿЀ-ӿ֐-׿؀-ۿऀ-෿฀-๿"
                           r"ᄀ-ᇿ぀-ヿ㐀-鿿가-힯]")
 DOI_FORMAT_RE = re.compile(r"^10\.\d{4,9}/\S+$")
@@ -544,7 +544,9 @@ def pdf_checks(pdf_path: Path, record: dict, compile_msgs: list[str]) -> list[Fi
     first = _norm(page_texts[0]) if page_texts else ""
     first_cmp = re.sub(r"[\s\-‐]+", "", first).lower()
     positions = [first_cmp.find(re.sub(r"[\s\-‐]+", "", _norm(a["full_name"])).lower()) for a in record["authors"]]
-    if record["authors"] and all(p >= 0 for p in positions) and positions == sorted(positions):
+    if not record["authors"]:
+        F(Finding("pdf-author-order", NA, "Author order in PDF", "The record has no authors yet; see the author findings.", "authors", "pdf"))
+    elif all(p >= 0 for p in positions) and positions == sorted(positions):
         F(Finding("pdf-author-order", PASS, "Author order in PDF", "All authors print on page 1 in the recorded order.", "authors", "pdf"))
     else:
         F(Finding("pdf-author-order", BLOCKED, "Author order in PDF", "Authors are missing from page 1 or print in a different order.", "authors", "pdf"))
@@ -695,7 +697,7 @@ def agreement_checks(record: dict, pdf_path: Path, pages: dict[str, Path], json_
                 if g != expected_cmp:
                     disagreements.append(f"{key} in {name}")
                 continue
-            if (g or None) != (str(expected) if expected is not None and key in ("volume", "issue") else expected):
+            if (g or None) != (str(expected) if expected is not None and key in ("volume", "issue") else (expected or None)):
                 disagreements.append(f"{key} in {name}")
     if disagreements:
         out.append(Finding("agreement", BLOCKED, "Metadata agrees across outputs", "Differs: " + ", ".join(disagreements), "", "json"))

@@ -156,7 +156,52 @@ def locator(record: dict, profile: Profile) -> str:
     return ""
 
 
+_SEGMENT_SEP = re.compile(r"(\s+[/|·]\s+)")
+
+
+INSERT = "[Insert {}]"
+
+
+def insert_mode(profile) -> bool:
+    """layout.house.missing: insert prints "[Insert ...]" in the proof where a
+    value is missing, for the editor and authors to fill in."""
+    return ((profile.data.get("layout") or {}).get("house") or {}).get("missing") == "insert"
+
+
+def insert_dates(record: dict, fmt_date) -> list:
+    out = []
+    for k in ("received", "revised", "accepted", "published"):
+        v = record["dates"].get(k) or {}
+        out.append((k.capitalize(), fmt_date(v["value"]) if v.get("value") and v.get("verified") else INSERT.format("date")))
+    return out
+
+
 def _template_fill(tpl: str, values: dict) -> str:
+    """Fill {placeholders}. A template split by " / ", " | " or " · " is
+    filled segment by segment, and a segment whose placeholders are all
+    empty is dropped with its separator, so a header never prints
+    "et al. / Vol / Issue / /" for an article that has no details yet."""
+    parts = _SEGMENT_SEP.split(tpl or "")
+    if len(parts) > 1:
+        kept, seps = [], []
+        for i in range(0, len(parts), 2):
+            seg = parts[i]
+            names = re.findall(r"\{(\w+)\}", seg)
+            if names and all(values.get(n) in (None, "") for n in names):
+                continue
+            filled = _template_fill_one(seg, values)
+            if filled:
+                if kept:
+                    seps.append(parts[i - 1])
+                kept.append(filled)
+        out = kept[0] if kept else ""
+        for sep, seg in zip(seps, kept[1:]):
+            out += sep + seg
+        return out.strip()
+    return _template_fill_one(tpl, values)
+
+
+def _template_fill_one(tpl: str, values: dict) -> str:
     def rep(m):
         v = values.get(m.group(1))
         return "" if v in (None, "") else str(v)
@@ -175,7 +220,7 @@ def build_view(record: dict, profile: Profile, watermark: str | None) -> tuple[d
     branding = data.get("branding") or {}
     fonts = dict({"body": "Libertinus Serif", "heading": "Libertinus Serif", "sans": "DejaVu Sans", "size": 10},
                  **(branding.get("fonts") or {}))
-    colors = dict({"primary": "#1f3b63", "accent": "#b5532a", "rule": "#9aa7b8", "muted": "#5b6573"},
+    colors = dict({"primary": "#1f3b63", "accent": "#b5532a", "rule": "#9aa7b8", "muted": "#5b6573", "ink": "#000000"},
                   **(branding.get("colors") or {}))
     margins = layout.get("margins") or {}
     columns = atype.get("columns", layout.get("columns", 2))
@@ -184,6 +229,12 @@ def build_view(record: dict, profile: Profile, watermark: str | None) -> tuple[d
         "column_gap": layout.get("column_gap", "6mm"), "size": float(fonts.get("size", 10)),
         "fonts": fonts, "colors": colors, "table_size": float(layout.get("table_font_size", 8)),
         "margins": {k: margins.get(k, "20mm") for k in ("top", "bottom", "inside", "outside")},
+        # House-style switches; every key is optional and defaults to the
+        # standard Studio layout. See layout.house in a profile.
+        "house": {"masthead": "band", "title_case": "as-is", "title_size": 17, "title_align": "left",
+                  "abstract_box": "variant", "abstract_heading": None, "keywords_label": "Keywords",
+                  "header_style": "split", "heading_color": "primary", "first_line_indent": 1.0,
+                  **(layout.get("house") or {})},
     }
     for k in ("top", "bottom", "inside", "outside"):
         style["margins"][k] = _length(style["margins"][k])
@@ -212,6 +263,13 @@ def build_view(record: dict, profile: Profile, watermark: str | None) -> tuple[d
                  (f"Article {loc}" if loc and (data.get("numbering") or {}).get("model") == "article-number"
                   else f"Pages {loc}" if loc else None)]
     doi_url = f"https://doi.org/{pub['doi']}" if pub.get("doi") else None
+    insert = insert_mode(profile)
+    if insert:
+        line_bits = [str(pub["year"]) if pub.get("year") else INSERT.format("year"),
+                     f"Volume {pub.get('volume') or INSERT.format('volume')}",
+                     f"Issue {pub.get('issue') or INSERT.format('issue')}",
+                     (f"Article {loc}" if (data.get("numbering") or {}).get("model") == "article-number" else f"Pages {loc}")
+                     if loc else f"Pages {INSERT.format('pages')}"]
 
     authors = []
     aff_labels = {a["id"]: a["label"] for a in record["affiliations"]}
@@ -226,6 +284,18 @@ def build_view(record: dict, profile: Profile, watermark: str | None) -> tuple[d
     correspondence = "; ".join(f"{a['full_name']}" + (f", {a['email']}" if a.get("email") else "") for a in corr) or None
     dates = [(k.capitalize(), fmt_date(v["value"])) for k, v in record["dates"].items()
              if v and v.get("value") and v.get("verified")]
+    affiliations = [{"label": a["label"], "text": a["raw"]} for a in record["affiliations"]]
+    if insert:
+        # Proof placeholders. They are display only: record.json, the XML and
+        # the page metadata never carry them, and checks.PLACEHOLDER_RE keeps
+        # the proof blocked while any is showing.
+        if not authors:
+            authors = [{"name": INSERT.format("author names"), "sup": "1", "corresponding": True, "orcid": None}]
+        if not affiliations:
+            affiliations = [{"label": "1", "text": INSERT.format("department, institution, city, country")}]
+        correspondence = "; ".join(f"{a['full_name']}, " + (a.get("email") or INSERT.format("email")) for a in corr) \
+            or INSERT.format("corresponding author name and email")
+        dates = insert_dates(record, fmt_date)
 
     abstract = None
     if record["abstract"]["sections"]:
@@ -266,7 +336,14 @@ def build_view(record: dict, profile: Profile, watermark: str | None) -> tuple[d
         "first_author_surname": record["authors"][0]["family"] if record["authors"] else "",
         "short_title": record.get("short_title") or short_title(plain(record["title"]["en"])),
     }
+    if insert:
+        for k, what in (("year", "year"), ("volume", "volume"), ("issue", "issue"), ("locator", "pages"),
+                        ("first_author_surname", "first author")):
+            if hdr_values.get(k) in (None, ""):
+                hdr_values[k] = INSERT.format(what)
     lic = record.get("license")
+    if insert and not lic:
+        lic = {"statement": INSERT.format("licence statement"), "url": None, "type": None}
     view = {
         "lang": record.get("language", "en"),
         "watermark": watermark,
@@ -275,6 +352,8 @@ def build_view(record: dict, profile: Profile, watermark: str | None) -> tuple[d
         "cite_form": (data.get("references") or {}).get("in_text", "bracket"),
         "masthead": {"journal_title": j.get("title") or "", "publisher": j.get("publisher") or "",
                      "issn_line": " · ".join(issn_bits), "url": j.get("homepage") or "",
+                     "issn_lines": ([f"e-ISSN {j['issn_online']}"] if j.get("issn_online") else [])
+                                   + ([f"Print ISSN {j['issn_print']}"] if j.get("issn_print") else []),
                      "logo": "logo" + logo.suffix if logo else None},
         "article_type_label": atype.get("label", record["article_type"]),
         "article_line": " · ".join(b for b in line_bits if b),
@@ -284,7 +363,8 @@ def build_view(record: dict, profile: Profile, watermark: str | None) -> tuple[d
         "title_original": _prepare_inlines(record["title"].get("original"), ctx) or None,
         "title_original_lang": record["title"].get("original_lang") or "en",
         "authors": authors,
-        "affiliations": [{"label": a["label"], "text": a["raw"]} for a in record["affiliations"]],
+        "meta_authors": [a["full_name"] for a in record["authors"]],
+        "affiliations": affiliations,
         "correspondence": correspondence,
         "dates": dates,
         "abstract": abstract if atype.get("abstract", {}).get("required", True) or abstract else None,
@@ -296,10 +376,13 @@ def build_view(record: dict, profile: Profile, watermark: str | None) -> tuple[d
         "declarations": declarations,
         "references": [{"id": r["id"], "label": r["label"], "c": _prepare_inlines(r["c"], ctx)} for r in refs],
         "license": {"statement": lic["statement"], "url": lic.get("url"), "type": lic.get("type")} if lic else None,
-        "header": {"odd": _template_fill(layout.get("running_header", "{journal_abbreviation}"), hdr_values),
-                   "even": _template_fill(layout.get("running_header_even", "{first_author_surname} et al."), hdr_values)},
+        "header": {"odd": _template_fill(layout.get("running_header", "{journal_abbreviation}"), hdr_values)
+                   or _template_fill("{journal_abbreviation}", hdr_values),
+                   "even": _template_fill(layout.get("running_header_even", "{first_author_surname} et al."), hdr_values)
+                   or _template_fill("{journal_abbreviation}", hdr_values)},
         "footer": _template_fill(layout.get("footer", "{doi_url}"), hdr_values),
         "supplementary": record.get("supplementary") or [],
+        "doi_placeholder": INSERT.format("DOI") if insert and not doi_url else None,
     }
     facts = {"references": refs, "math_failed": [e for e in exprs if e not in math], "notes": render_notes,
              "tables": {k: {"wide": v["wide"], "long": v["long"]} for k, v in tables.items()}}
